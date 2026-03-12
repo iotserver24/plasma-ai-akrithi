@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { Template, defaultBuildLogger } from 'e2b'
 import { template } from './template'
 
-const TEMPLATE_ALIAS = 'plasma-xibecode-v2'
+const TEMPLATE_ALIAS = 'plasma-xibecode-v3'
 
 async function main() {
   console.log('🚀 Building Plasma XibeCode template...\n')

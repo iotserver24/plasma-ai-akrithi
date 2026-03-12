@@ -7,7 +7,7 @@ import { Template } from 'e2b'
 export const template = Template()
   .fromNodeImage('24')
   .aptInstall(['curl', 'git', 'ripgrep', 'gh'])
-  .npmInstall('xibecode@latest', { g: true })
+  .npmInstall('xibecode@0.6.3', { g: true })
   // xibecode's pattern-miner imports 'typescript' at runtime
   .npmInstall('typescript', { g: true })
 
