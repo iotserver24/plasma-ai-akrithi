@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import { auth } from '../middleware/auth.js'
 import { runAgentInSandbox } from '../services/sandbox.service.js'
-import { createPR } from '../services/pr.service.js'
 import { Chat } from '../db/chat.model.js'
 import { Execution } from '../db/execution.model.js'
 import { ExecutionLog } from '../db/executionLog.model.js'
@@ -81,7 +80,7 @@ router.post('/', auth, async (req, res) => {
       await chatDoc.updateOne({ $push: { executions: executionDoc._id } })
     }
 
-    const { committed } = await runAgentInSandbox({
+    const { committed, prUrl } = await runAgentInSandbox({
       repo,
       owner,
       prompt,
@@ -90,8 +89,8 @@ router.post('/', auth, async (req, res) => {
       defaultBranch: defaultBranch || 'main',
     })
 
-    if (!committed) {
-      emit('warning', 'No changes were made by the agent.', 'server')
+    if (!committed || !prUrl) {
+      emit('warning', 'XibeCode did not produce a PR URL. Check logs for details.', 'server')
       send('done', null)
       if (executionDoc) {
         await Execution.updateOne(
@@ -102,30 +101,21 @@ router.post('/', auth, async (req, res) => {
       return
     }
 
-    emit('log', 'Creating Pull Request...', 'server')
-    const pr = await createPR({
-      owner,
-      repo,
-      githubToken,
-      prompt,
-      defaultBranch: defaultBranch || 'main',
-    })
-
-    emit('log', `Pull Request created: ${pr.url}`, 'server')
-    send('pr', { url: pr.url, number: pr.number, title: pr.title })
+    onLog(`Pull Request created by XibeCode: ${prUrl}`)
+    send('pr', { url: prUrl, number: null, title: null })
     send('done', null)
 
     if (chatDoc) {
       await chatDoc.updateOne({
-        prUrl: pr.url,
+        prUrl,
         status: 'success',
-        $push: { messages: { role: 'assistant', content: `PR created: ${pr.url}` } },
+        $push: { messages: { role: 'assistant', content: `PR created: ${prUrl}` } },
       })
     }
     if (executionDoc) {
       await Execution.updateOne(
         { _id: executionDoc._id },
-        { prUrl: pr.url, status: 'success', endedAt: new Date() }
+        { prUrl, status: 'success', endedAt: new Date() }
       )
     }
   } catch (err) {

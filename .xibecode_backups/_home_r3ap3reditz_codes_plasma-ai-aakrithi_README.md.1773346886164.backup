@@ -2,8 +2,6 @@
 
 AI coding agent that takes a natural language prompt, runs Claude Code in an E2B sandbox to modify a GitHub repository, and automatically creates a Pull Request.
 
-**Made by R3AP3R editz**
-
 ## Demo Flow
 
 **Prompt → AI edits repo → Pull Request created automatically**

@@ -18,16 +18,31 @@ export async function runAgentInSandbox({ repo, owner, prompt, githubToken, onLo
   const anthropicKey = process.env.ANTHROPIC_API_KEY
   if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
 
-  const anthropicBaseUrl = process.env.ANTHROPIC_API_URL
+  const anthropicBase =
+    process.env.ANTHROPIC_BASE_URL && process.env.ANTHROPIC_BASE_URL.trim().length > 0
+      ? process.env.ANTHROPIC_BASE_URL
+      : process.env.ANTHROPIC_API_URL
   const anthropicModel = process.env.ANTHROPIC_MODEL
 
+  // Prefer explicit template overrides; otherwise fall back to the prebuilt 'claude' template.
+  const templateId =
+    process.env.E2B_TEMPLATE_ID || process.env.E2B_TEMPLATE_ALIAS || 'claude'
+
   onLog('Creating sandbox...')
-  const sandbox = await Sandbox.create('claude', {
+  const sandbox = await Sandbox.create(templateId, {
     apiKey,
     envs: {
       ANTHROPIC_API_KEY: anthropicKey,
-      ...(anthropicBaseUrl ? { ANTHROPIC_API_URL: anthropicBaseUrl } : {}),
+      ...(anthropicBase
+        ? {
+            ANTHROPIC_BASE_URL: anthropicBase,
+            ANTHROPIC_API_URL: anthropicBase,
+          }
+        : {}),
       ...(anthropicModel ? { ANTHROPIC_MODEL: anthropicModel } : {}),
+      // Expose GitHub token to tools that understand GH_TOKEN/GITHUB_TOKEN (xibecode, gh CLI)
+      GH_TOKEN: githubToken,
+      GITHUB_TOKEN: githubToken,
       GIT_TERMINAL_PROMPT: '0',
     },
     timeoutMs: 10 * 60 * 1000,
@@ -50,66 +65,51 @@ export async function runAgentInSandbox({ repo, owner, prompt, githubToken, onLo
     await sandbox.commands.run(
       `cd ${workdir} && ` +
       `git config user.email "ai@plasma.dev" && ` +
-      `git config user.name "Plasma AI" && ` +
-      `git checkout -b xibecode-ai-change`
+      `git config user.name "Plasma AI"`
     )
 
-    onLog('Running Claude Code agent...')
+    onLog('Running XibeCode run-pr (Anthropic provider)...')
     const safePrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$')
-    await sandbox.commands.run(
-      `cd ${workdir} && claude --dangerously-skip-permissions --output-format stream-json -p "${safePrompt}"`,
-      {
-        timeoutMs: 8 * 60 * 1000,
-        onStdout: (data) => {
-          for (const line of data.split('\n').filter(Boolean)) {
-            try {
-              const event = JSON.parse(line)
-              if (event.type === 'assistant') {
-                const text = event.message?.content
-                  ?.filter((b) => b.type === 'text')
-                  ?.map((b) => b.text)
-                  ?.join(' ')
-                  ?.slice(0, 120)
-                if (text) onLog(`[Claude] ${text}`)
-              } else if (event.type === 'result') {
-                onLog(`[Claude] Completed: ${event.subtype} (${Math.round((event.duration_ms || 0) / 1000)}s)`)
-              } else if (event.type === 'system') {
-                onLog(`[System] ${event.subtype}`)
-              }
-            } catch {
-              if (data.trim()) onLog(data.trim())
-            }
+    const xibecodeCommands = [
+      `cd ${workdir}`,
+      // Configure XibeCode using sandbox environment variables
+      'xibecode config --set-key "$ANTHROPIC_API_KEY"',
+      anthropicBase ? 'xibecode config --set-url "$ANTHROPIC_BASE_URL"' : null,
+      anthropicModel ? 'xibecode config --set-model "$ANTHROPIC_MODEL"' : null,
+      // Run end-to-end PR flow with Anthropic provider and model from env (if set)
+      `XIBECODE_VERBOSE=true xibecode run-pr --provider anthropic${
+        anthropicModel ? ' --model "$ANTHROPIC_MODEL"' : ''
+      } "${safePrompt}"`
+    ].filter(Boolean).join(' && ')
+
+    let prUrl = null
+
+    await sandbox.commands.run(xibecodeCommands, {
+      timeoutMs: 8 * 60 * 1000,
+      onStdout: (data) => {
+        if (!data.trim()) return
+        for (const line of data.split('\n').filter(Boolean)) {
+          // Try to capture a PR URL if XibeCode prints one
+          const match = line.match(/https:\/\/github\.com\/\S+\/pull\/\d+/)
+          if (match) {
+            prUrl = match[0]
           }
-        },
-        onStderr: (data) => {
-          if (data.trim()) onLog(`[stderr] ${data.trim()}`)
-        },
-      }
-    )
+          onLog(`[XibeCode] ${line}`)
+        }
+      },
+      onStderr: (data) => {
+        if (data.trim()) onLog(`[stderr] ${data.trim()}`)
+      },
+    })
 
-    onLog('Checking for changes...')
-    const statusResult = await sandbox.commands.run(`cd ${workdir} && git status --porcelain`)
-    if (!statusResult.stdout.trim()) {
-      onLog('No file changes detected — skipping commit.')
-      return { committed: false }
+    // XibeCode run-pr already handled branch, commit, push, and PR creation.
+    if (prUrl) {
+      onLog(`PR detected from XibeCode: ${prUrl}`)
+      return { committed: true, prUrl }
     }
 
-    onLog('Committing changes...')
-    const commitMsg = `AI: ${prompt.slice(0, 72)}`
-    await sandbox.commands.run(
-      `cd ${workdir} && git add . && git commit -m "${commitMsg.replace(/"/g, '\\"')}"`
-    )
-
-    onLog('Pushing branch xibecode-ai-change...')
-    const pushResult = await sandbox.commands.run(
-      `cd ${workdir} && git push https://x-access-token:${githubToken}@github.com/${owner}/${repo}.git xibecode-ai-change --force 2>&1`
-    )
-    if (pushResult.exitCode !== 0) {
-      throw new Error(`Push failed: ${pushResult.stdout}`)
-    }
-
-    onLog('Branch pushed successfully.')
-    return { committed: true }
+    onLog('XibeCode run-pr completed but no PR URL was detected.')
+    return { committed: false }
   } finally {
     onLog('Closing sandbox...')
     await sandbox.kill()
