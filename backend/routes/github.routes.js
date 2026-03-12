@@ -3,19 +3,35 @@ import { auth } from '../middleware/auth.js'
 
 const router = Router()
 
+function getGithubToken() {
+  return process.env.GITHUB_TOKEN
+}
+
 router.get('/repos', auth, async (req, res) => {
-  const githubToken = req.headers['x-github-token']
+  const githubToken = getGithubToken()
   if (!githubToken) {
-    return res.status(400).json({ error: 'GitHub token required in x-github-token header' })
+    return res.status(500).json({ error: 'GitHub token is not configured on the server' })
   }
 
+  const pageRaw =
+    typeof req.query.page === 'string'
+      ? req.query.page
+      : Array.isArray(req.query.page)
+      ? req.query.page[0]
+      : undefined
+  const page = Number.parseInt(pageRaw || '1', 10) || 1
+  const perPage = 100
+
   try {
-    const response = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+    const response = await fetch(
+      `https://api.github.com/user/repos?per_page=${perPage}&page=${page}&sort=updated`,
+      {
       headers: {
         Authorization: `token ${githubToken}`,
         Accept: 'application/vnd.github.v3+json',
       },
-    })
+      }
+    )
 
     if (!response.ok) {
       const err = await response.json()
@@ -40,10 +56,10 @@ router.get('/repos', auth, async (req, res) => {
   }
 })
 
-router.get('/user', auth, async (req, res) => {
-  const githubToken = req.headers['x-github-token']
+router.get('/user', auth, async (_req, res) => {
+  const githubToken = getGithubToken()
   if (!githubToken) {
-    return res.status(400).json({ error: 'GitHub token required' })
+    return res.status(500).json({ error: 'GitHub token is not configured on the server' })
   }
 
   try {

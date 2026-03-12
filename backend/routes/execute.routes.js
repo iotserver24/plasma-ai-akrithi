@@ -8,13 +8,13 @@ const router = Router()
 
 router.post('/', auth, async (req, res) => {
   const { prompt, repo, owner, defaultBranch } = req.body
-  const githubToken = req.headers['x-github-token']
+  const githubToken = process.env.GITHUB_TOKEN
 
   if (!prompt || !repo || !owner) {
     return res.status(400).json({ error: 'prompt, repo, and owner are required' })
   }
   if (!githubToken) {
-    return res.status(400).json({ error: 'x-github-token header is required' })
+    return res.status(500).json({ error: 'GitHub token is not configured on the server' })
   }
 
   res.setHeader('Content-Type', 'text/event-stream')

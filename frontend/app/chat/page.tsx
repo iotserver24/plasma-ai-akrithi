@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { getToken, getGithubToken } from '@/lib/api'
+import { getToken } from '@/lib/api'
 import PromptInput from '@/components/PromptInput'
 import LogsPanel from '@/components/LogsPanel'
 import ExecutionStatus from '@/components/ExecutionStatus'
@@ -61,9 +61,8 @@ export default function ChatPage() {
 
   async function handleExecute() {
     if (!repo || !prompt.trim()) return
-    const githubToken = getGithubToken()
     const token = getToken()
-    if (!githubToken || !token) { router.replace('/login'); return }
+    if (!token) { router.replace('/login'); return }
 
     setRunning(true)
     setLogs([])
@@ -78,7 +77,6 @@ export default function ChatPage() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'x-github-token': githubToken,
         },
         body: JSON.stringify({
           prompt: prompt.trim(),
