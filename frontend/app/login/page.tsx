@@ -1,72 +1,29 @@
-'use client'
-import { useState, FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import LoginForm from '@/components/LoginForm'
 
 export default function LoginPage() {
-  const router = useRouter()
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
-
-    try {
-      const res = await fetch('http://localhost:3001/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      })
-
-      if (res.ok) {
-        router.push('/dashboard')
-      } else {
-        setError('Invalid credentials')
-      }
-    } catch {
-      setError('Invalid credentials')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
+        {/* Logo / Brand */}
         <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-[#00e5a0] to-[#00b87a] mb-4 shadow-lg shadow-[#00e5a0]/20">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0d0f14" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+          </div>
           <h1 className="text-2xl font-bold tracking-tight">Plasma AI</h1>
           <p className="text-sm text-gray-500 mt-1">AI coding agent for GitHub</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="card space-y-4">
-          <div>
-            <label className="block text-sm mb-1">Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="input-field"
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input-field"
-            />
-          </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
-          <button type="submit" className="btn-primary w-full" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
-        </form>
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-5">Sign in to continue</h2>
+          <LoginForm />
+        </div>
+
+        <p className="text-center text-xs text-gray-600 mt-6">
+          Prompt → AI edits repo → Pull Request, automatically.
+        </p>
       </div>
     </main>
   )

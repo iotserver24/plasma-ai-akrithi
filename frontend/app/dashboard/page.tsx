@@ -26,10 +26,8 @@ export default function DashboardPage() {
   const [hasMore, setHasMore] = useState(true)
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) {
-      // No token: stay on this page but avoid calling protected APIs.
-      setError('You are not authenticated. Please sign in again.')
+    if (!getToken()) {
+      router.replace('/login')
       return
     }
     const savedRepo = localStorage.getItem('selectedRepo')
@@ -160,4 +158,3 @@ export default function DashboardPage() {
     </main>
   )
 }
-
