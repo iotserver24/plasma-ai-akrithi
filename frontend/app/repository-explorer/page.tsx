@@ -91,7 +91,7 @@ export default function RepositoryExplorerPage() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('selectedRepo', JSON.stringify(selectedRepo))
     }
-    router.push('/developer')
+    router.push('/chat')
   }
 
   const filteredRepos = useMemo(() => {
