@@ -1,16 +1,12 @@
-import jwt from 'jsonwebtoken'
+// Simple session-based authentication middleware for demo purposes.
+// It assumes that a successful login has stored a "user" property on req.session.
 
 export function auth(req, res, next) {
-  const header = req.headers['authorization']
-  if (!header || !header.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing or invalid token' })
+  // If there is no session or no user on the session, the request is unauthorized.
+  if (!req.session || !req.session.user) {
+    return res.status(401).json({ message: 'Unauthorized' })
   }
-  const token = header.slice(7)
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET)
-    req.user = payload
-    next()
-  } catch {
-    return res.status(401).json({ error: 'Token expired or invalid' })
-  }
+
+  // At this point the user is considered authenticated; continue to the next handler.
+  next()
 }
