@@ -1,6 +1,6 @@
 # Plasma AI — Aakrithi
 
-AI coding agent that takes a natural language prompt, runs Claude Code in an E2B sandbox to modify a GitHub repository, and automatically creates a Pull Request.
+AI coding agent that takes a natural language prompt, runs XibeCode in an E2B sandbox to modify a GitHub repository, and automatically creates a Pull Request.
 
 **Made by R3AP3R editz**
 
@@ -13,8 +13,8 @@ AI coding agent that takes a natural language prompt, runs Claude Code in an E2B
 - **Frontend**: Next.js 14 (App Router) + Tailwind CSS
 - **Backend**: Node.js + Express (ESM)
 - **Database**: MongoDB (Mongoose)
-- **AI Agent**: Claude Code (`@anthropic-ai/claude-code`)
-- **Sandbox**: E2B (`claude` template)
+- **AI Agent**: XibeCode CLI (`xibecode`)
+- **Sandbox**: E2B (custom `plasma-xibecode` template)
 - **Package Manager**: Bun
 
 ## Setup
@@ -60,9 +60,10 @@ Or use a free MongoDB Atlas cluster and set `MONGODB_URI` accordingly.
 | `JWT_SECRET` | Secret for signing JWTs |
 | `MONGODB_URI` | MongoDB connection string |
 | `E2B_API_KEY` | E2B API key from [e2b.dev](https://e2b.dev) |
-| `ANTHROPIC_API_KEY` | Anthropic or proxy API key used by Claude Code inside the sandbox |
+| `E2B_TEMPLATE_ALIAS` | E2B template alias to use (default: `plasma-xibecode`) |
+| `ANTHROPIC_API_KEY` | Anthropic or proxy API key used by XibeCode inside the sandbox |
 | `ANTHROPIC_BASE_URL` | Anthropic API base URL or your proxy URL (e.g. `https://api.anthropic.com` or your router) |
-| `ANTHROPIC_MODEL` | Model ID that Anthropic or your proxy expects (e.g. `claude-3-5-sonnet-latest`) |
+| `ANTHROPIC_MODEL` | Model ID that Anthropic or your proxy expects (e.g. `claude-3-7-sonnet-20250219` or your proxy’s model name) |
 | `FRONTEND_URL` | Frontend origin for CORS |
 | `PORT` | Backend port (default: 4000) |
 
@@ -83,27 +84,19 @@ Or use a free MongoDB Atlas cluster and set `MONGODB_URI` accordingly.
 ## How it works
 
 1. User logs in with credentials from `.env`
-2. User enters GitHub PAT and selects a repository
+2. User selects a repository (GitHub PAT is configured on the backend via `GITHUB_TOKEN`)
 3. User writes a natural language prompt (e.g. "Add rate limiting middleware")
-4. Backend creates an E2B sandbox with the `claude` template (Claude Code pre-installed)
-5. Inside the sandbox: repo is cloned, `xibecode-ai-change` branch is created
-6. `claude --dangerously-skip-permissions` runs the coding agent
-7. Agent edits files, then changes are committed and pushed
-8. Backend calls GitHub API to create a Pull Request
-9. PR link is shown in real-time via SSE streaming
+4. Backend creates an E2B sandbox with the `plasma-xibecode` template (XibeCode + gh CLI pre-installed)
+5. Inside the sandbox: repo is cloned and XibeCode is configured from `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL`
+6. `xibecode run-pr --provider anthropic ...` runs the autonomous coding + PR workflow
+7. XibeCode edits files, runs tests (if configured), commits, pushes, and creates a PR via `gh pr create`
+8. Backend parses the PR URL from XibeCode logs and streams it back over SSE
 
-## E2B Claude Template
+## E2B XibeCode Template
 
-The `claude` E2B template has Claude Code pre-installed. If it doesn't exist in your E2B account, you can build it:
+The `plasma-xibecode` E2B template has XibeCode (and `gh`) pre-installed. To build or update it:
 
 ```bash
-# template.ts
-import { Template } from 'e2b'
-
-Template()
-  .fromNodeImage('24')
-  .aptInstall(['curl', 'git', 'ripgrep'])
-  .npmInstall('@anthropic-ai/claude-code@latest', { g: true })
+cd backend
+bunx tsx e2b-template/build.ts
 ```
-
-Then build: `e2b template build --name claude`

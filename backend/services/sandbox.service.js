@@ -27,6 +27,33 @@ export async function runAgentInSandbox({ repo, owner, prompt, githubToken, onLo
   // Prefer explicit template overrides; otherwise fall back to the prebuilt 'claude' template.
   const templateId =
     process.env.E2B_TEMPLATE_ID || process.env.E2B_TEMPLATE_ALIAS || 'claude'
+  const redactedApiKey = anthropicKey
+    ? `${anthropicKey.slice(0, 6)}...${anthropicKey.slice(-4)}`
+    : 'missing'
+
+  // #region agent log
+  fetch('http://127.0.0.1:7481/ingest/b12e926a-f86f-43f6-bc76-9c02462ac54a', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': 'cc1449',
+    },
+    body: JSON.stringify({
+      sessionId: 'cc1449',
+      runId: 'pre-xibecode-env',
+      hypothesisId: 'H1-H2',
+      location: 'backend/services/sandbox.service.js:30-48',
+      message: 'E2B sandbox envs before Sandbox.create',
+      data: {
+        templateId,
+        hasAnthropicKey: Boolean(anthropicKey),
+        anthropicBase,
+        anthropicModel,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {})
+  // #endregion
 
   onLog('Creating sandbox...')
   const sandbox = await Sandbox.create(templateId, {
@@ -68,19 +95,47 @@ export async function runAgentInSandbox({ repo, owner, prompt, githubToken, onLo
       `git config user.name "Plasma AI"`
     )
 
-    onLog('Running XibeCode run-pr (Anthropic provider)...')
+    onLog(
+      `Sandbox config → template=${templateId}, provider=anthropic, baseUrl=${anthropicBase || 'unset'}, model=${anthropicModel || 'unset'}, apiKey=${redactedApiKey}`
+    )
+    const versionResult = await sandbox.commands.run('xibecode --version', { timeoutMs: 15_000 })
+    onLog(`Sandbox xibecode version: ${(versionResult.stdout || versionResult.stderr || 'unknown').trim()}`)
+
+    onLog('Running XibeCode run-pr (Anthropic provider, using backend .env)...')
     const safePrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$')
     const xibecodeCommands = [
       `cd ${workdir}`,
-      // Configure XibeCode using sandbox environment variables
-      'xibecode config --set-key "$ANTHROPIC_API_KEY"',
-      anthropicBase ? 'xibecode config --set-url "$ANTHROPIC_BASE_URL"' : null,
-      anthropicModel ? 'xibecode config --set-model "$ANTHROPIC_MODEL"' : null,
-      // Run end-to-end PR flow with Anthropic provider and model from env (if set)
-      `XIBECODE_VERBOSE=true xibecode run-pr --provider anthropic${
-        anthropicModel ? ' --model "$ANTHROPIC_MODEL"' : ''
-      } "${safePrompt}"`
-    ].filter(Boolean).join(' && ')
+      // Run end-to-end PR flow, forcing config from env via CLI flags only
+      `XIBECODE_VERBOSE=true xibecode run-pr --provider anthropic` +
+        ` --api-key "$ANTHROPIC_API_KEY"` +
+        (anthropicBase ? ' --base-url "$ANTHROPIC_BASE_URL"' : '') +
+        (anthropicModel ? ' --model "$ANTHROPIC_MODEL"' : '') +
+        ` "${safePrompt}"`
+    ].join(' && ')
+
+    // #region agent log
+    fetch('http://127.0.0.1:7481/ingest/b12e926a-f86f-43f6-bc76-9c02462ac54a', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': 'cc1449',
+      },
+      body: JSON.stringify({
+        sessionId: 'cc1449',
+        runId: 'pre-xibecode-run',
+        hypothesisId: 'H3',
+        location: 'backend/services/sandbox.service.js:71-80',
+        message: 'XibeCode command about to run (redacted)',
+        data: {
+          hasAnthropicKeyEnv: true,
+          anthropicBase,
+          anthropicModel,
+          commandPreview: 'XIBECODE_VERBOSE=true xibecode run-pr --provider anthropic --api-key "$ANTHROPIC_API_KEY"...',
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion
 
     let prUrl = null
 

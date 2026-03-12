@@ -1,4 +1,6 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import express from 'express'
 import cors from 'cors'
 import { connectDB } from './db/mongo.js'
@@ -7,6 +9,10 @@ import githubRoutes from './routes/github.routes.js'
 import executeRoutes from './routes/execute.routes.js'
 import chatRoutes from './routes/chat.routes.js'
 import executionRoutes from './routes/execution.routes.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+dotenv.config({ path: path.join(__dirname, '.env'), override: true })
 
 const app = express()
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000

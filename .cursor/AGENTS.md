@@ -10,5 +10,5 @@
 - The frontend is a Next.js App Router app (Next 16) with Tailwind CSS, using Bun as the package manager and exposing `/login`, `/dashboard`, and `/chat` pages.
 - The backend is an Express server using Bun, MongoDB via Mongoose, and E2B sandboxes to run XibeCode (Anthropic provider) in the cloned repository, create the `xibecode-ai-change` branch, commit changes, push, and create PRs via the GitHub REST API.
 - The backend reads a GitHub Personal Access Token from the `GITHUB_TOKEN` environment variable and uses it for all GitHub API and git operations; the frontend never asks for or stores any GitHub tokens, and tokens are never written to the database or logs.
-- Anthropic (or Claude-compatible) integration is configured via `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL` in `backend/.env`, and these are passed through to the E2B sandbox for the XibeCode agent.
+- Anthropic-compatible integration is configured with `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL`, then passed into the E2B sandbox for XibeCode; if those vars are already exported in the backend shell, they override values from `backend/.env` at runtime.
 

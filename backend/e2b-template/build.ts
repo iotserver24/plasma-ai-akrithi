@@ -2,10 +2,10 @@ import 'dotenv/config'
 import { Template, defaultBuildLogger } from 'e2b'
 import { template } from './template'
 
-const TEMPLATE_ALIAS = 'plasma-claude-code'
+const TEMPLATE_ALIAS = 'plasma-xibecode-v2'
 
 async function main() {
-  console.log('🚀 Building Plasma Claude Code template...\n')
+  console.log('🚀 Building Plasma XibeCode template...\n')
 
   const result = await Template.build(template, TEMPLATE_ALIAS, {
     cpuCount: 2,
