@@ -25,3 +25,25 @@ export function clearToken() {
   localStorage.removeItem('token')
   localStorage.removeItem('selectedRepo')
 }
+
+export async function login(username: string, password: string) {
+  const response = await api.post('/auth/login', { username, password })
+  const token = (response.data as { token?: string }).token
+  if (token) setToken(token)
+  return response.data
+}
+
+export async function getRepositories() {
+  const response = await api.get('/github/repos')
+  return response.data
+}
+
+export async function cloneRepository(repo: string) {
+  const response = await api.post('/github/clone', { repo })
+  return response.data
+}
+
+export async function executePrompt(prompt: string) {
+  const response = await api.post('/execute', { prompt })
+  return response.data
+}
