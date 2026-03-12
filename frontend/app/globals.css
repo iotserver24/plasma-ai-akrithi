@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg: #0d0f14;
+  --color-surface: #161a23;
+  --color-border: #1e2535;
+  --color-accent: #00e5a0;
+  --color-accent-dim: #00b87a;
+  --color-text: #e2e8f0;
+  --color-muted: #64748b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.terminal {
+  font-family: var(--font-geist-mono), 'Courier New', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #00e5a0, #00b87a);
+  color: #0d0f14;
+  font-weight: 700;
+  padding: 0.6rem 1.4rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.input-field {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 0.65rem 1rem;
+  border-radius: 0.5rem;
+  outline: none;
+  transition: border-color 0.2s;
+  font-size: 0.95rem;
+}
+.input-field:focus {
+  border-color: var(--color-accent);
+}
+.input-field::placeholder {
+  color: var(--color-muted);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+}
