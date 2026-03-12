@@ -45,6 +45,7 @@ router.post('/', auth, async (req, res) => {
       messages: [{ role: 'user', content: prompt }],
       status: 'running',
     })
+    send('chat', { id: chatDoc._id })
   } catch {
     // non-fatal — continue even if DB write fails
   }

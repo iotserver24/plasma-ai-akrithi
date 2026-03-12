@@ -7,7 +7,7 @@ export default function Home() {
   const router = useRouter()
   useEffect(() => {
     const token = getToken()
-    router.replace(token ? '/dashboard' : '/login')
+    router.replace(token ? '/repository-explorer' : '/login')
   }, [router])
   return null
 }

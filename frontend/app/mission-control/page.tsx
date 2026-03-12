@@ -1,15 +1,38 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+interface StoredRepo {
+  name: string
+  full_name: string
+  default_branch?: string
+}
 
 export default function MissionControlPage() {
   const terminalRef = useRef<HTMLDivElement | null>(null)
+  const [repoName, setRepoName] = useState<string | null>(null)
+  const [branchName, setBranchName] = useState<string | null>(null)
+  const [repoFullName, setRepoFullName] = useState<string | null>(null)
 
   // Scroll the terminal content to the bottom once on mount for a "live log" feel.
   useEffect(() => {
     const el = terminalRef.current
     if (el) {
       el.scrollTop = el.scrollHeight
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = window.localStorage.getItem('selectedRepo')
+    if (!stored) return
+    try {
+      const parsed: StoredRepo = JSON.parse(stored)
+      setRepoName(parsed.name || parsed.full_name || null)
+      setBranchName(parsed.default_branch || null)
+      setRepoFullName(parsed.full_name || null)
+    } catch {
+      // ignore parse errors; keep defaults
     }
   }, [])
 
@@ -37,7 +60,11 @@ export default function MissionControlPage() {
             <div className="h-8 w-px bg-gray-700" />
             <div className="flex flex-col">
               <span className="text-[10px] text-gray-500 uppercase">Active Task</span>
-              <span className="text-fixai-cyan font-semibold">Task: Add rate limiting</span>
+              <span className="text-fixai-cyan font-semibold">
+                {repoName && branchName
+                  ? `Task: Analyze ${repoName}:${branchName}`
+                  : 'Task: AI execution'}
+              </span>
             </div>
           </div>
           <div className="flex gap-4">
@@ -211,11 +238,11 @@ export default function MissionControlPage() {
                 <p className="text-gray-500 mb-1">
                   [2024-05-20 14:02:15]{' '}
                   <span className="text-fixai-lime">INFO</span> Repository cloned to
-                  {' /tmp/fixai-repo'}
+                  {' /tmp/'}{repoName || 'repo'}
                 </p>
                 <p className="text-white mb-1">
-                  <span className="text-fixai-cyan">$</span> git clone
-                  {' https://github.com/org/project.git'}
+                  <span className="text-fixai-cyan">$</span> git clone{' '}
+                  {repoFullName ? `https://github.com/${repoFullName}.git` : 'https://github.com/org/project.git'}
                 </p>
                 <p className="text-white mb-1">
                   <span className="text-fixai-cyan">$</span> npm install --silent

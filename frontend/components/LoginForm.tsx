@@ -17,7 +17,7 @@ export default function LoginForm() {
     try {
       const { data } = await api.post('/auth/login', { username, password })
       setToken(data.token)
-      router.push('/dashboard')
+      router.push('/repository-explorer')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
       setError(msg || 'Login failed. Check your credentials.')
@@ -58,7 +58,11 @@ export default function LoginForm() {
         </div>
       )}
 
-      <button type="submit" className="btn-primary justify-center mt-1" disabled={loading}>
+      <button
+        type="submit"
+        className="mt-1 inline-flex items-center justify-center px-4 py-2 rounded-md font-bold uppercase tracking-wider bg-[#00F3FF] text-[#0B0F14] shadow-[0_0_10px_rgba(0,243,255,0.5)] hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={loading}
+      >
         {loading ? (
           <>
             <span className="w-4 h-4 border-2 border-[#0d0f14] border-t-transparent rounded-full animate-spin" />
