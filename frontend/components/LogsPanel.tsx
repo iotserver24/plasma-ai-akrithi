@@ -62,13 +62,15 @@ export default function LogsPanel({ logs, prUrl, loading, lines }: Props) {
     return <div>AI is analyzing repository...</div>
   }
 
+  const simpleLogs = logs ?? []
+
   return (
     <div className="space-y-3">
-      {logs.length === 0 ? (
+      {simpleLogs.length === 0 ? (
         <div>No execution yet.</div>
       ) : (
         <ul className="space-y-1">
-          {logs.map((log, index) => (
+          {simpleLogs.map((log, index) => (
             <li key={index}>{log}</li>
           ))}
         </ul>
