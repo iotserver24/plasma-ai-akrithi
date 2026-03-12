@@ -18,18 +18,23 @@ export async function runAgentInSandbox({ repo, owner, prompt, githubToken, onLo
   const anthropicKey = process.env.ANTHROPIC_API_KEY
   if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not set')
 
+  const anthropicBaseUrl = process.env.ANTHROPIC_API_URL
+  const anthropicModel = process.env.ANTHROPIC_MODEL
+
   onLog('Creating sandbox...')
   const sandbox = await Sandbox.create('claude', {
     apiKey,
     envs: {
       ANTHROPIC_API_KEY: anthropicKey,
+      ...(anthropicBaseUrl ? { ANTHROPIC_API_URL: anthropicBaseUrl } : {}),
+      ...(anthropicModel ? { ANTHROPIC_MODEL: anthropicModel } : {}),
       GIT_TERMINAL_PROMPT: '0',
     },
     timeoutMs: 10 * 60 * 1000,
   })
 
   try {
-    const cloneUrl = `https://${githubToken}@github.com/${owner}/${repo}.git`
+    const cloneUrl = `https://x-access-token:${githubToken}@github.com/${owner}/${repo}.git`
     const workdir = `/home/user/${repo}`
 
     onLog(`Cloning ${owner}/${repo}...`)
@@ -97,7 +102,7 @@ export async function runAgentInSandbox({ repo, owner, prompt, githubToken, onLo
 
     onLog('Pushing branch xibecode-ai-change...')
     const pushResult = await sandbox.commands.run(
-      `cd ${workdir} && git push https://${githubToken}@github.com/${owner}/${repo}.git xibecode-ai-change --force 2>&1`
+      `cd ${workdir} && git push https://x-access-token:${githubToken}@github.com/${owner}/${repo}.git xibecode-ai-change --force 2>&1`
     )
     if (pushResult.exitCode !== 0) {
       throw new Error(`Push failed: ${pushResult.stdout}`)
