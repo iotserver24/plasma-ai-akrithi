@@ -5,6 +5,8 @@ import { connectDB } from './db/mongo.js'
 import authRoutes from './routes/auth.routes.js'
 import githubRoutes from './routes/github.routes.js'
 import executeRoutes from './routes/execute.routes.js'
+import chatRoutes from './routes/chat.routes.js'
+import executionRoutes from './routes/execution.routes.js'
 
 const app = express()
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000
@@ -19,6 +21,8 @@ app.use(express.json())
 app.use('/api/auth', authRoutes)
 app.use('/api/github', githubRoutes)
 app.use('/api/execute', executeRoutes)
+app.use('/api/chat', chatRoutes)
+app.use('/api/execution', executionRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' })

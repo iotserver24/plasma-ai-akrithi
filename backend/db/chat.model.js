@@ -11,6 +11,7 @@ const ChatSchema = new mongoose.Schema({
   owner: { type: String, required: true },
   prompt: { type: String, required: true },
   messages: [MessageSchema],
+  executions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Execution' }],
   prUrl: { type: String, default: null },
   status: { type: String, enum: ['running', 'success', 'failed'], default: 'running' },
   createdAt: { type: Date, default: Date.now },
