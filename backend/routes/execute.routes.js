@@ -3,6 +3,8 @@ import { auth } from '../middleware/auth.js'
 import { runAgentInSandbox } from '../services/sandbox.service.js'
 import { createPR } from '../services/pr.service.js'
 import { Chat } from '../db/chat.model.js'
+import { Execution } from '../db/execution.model.js'
+import { ExecutionLog } from '../db/executionLog.model.js'
 
 const router = Router()
 
@@ -27,15 +29,32 @@ router.post('/', auth, async (req, res) => {
     res.write(`data: ${JSON.stringify({ type, data })}\n\n`)
   }
 
-  const onLog = (msg) => send('log', msg)
+  let chatDoc = null
+  let executionDoc = null
 
-  const logMessages = []
-  const collectingOnLog = (msg) => {
-    logMessages.push(msg)
-    onLog(msg)
+  const persistLog = async (type, message, source = null) => {
+    if (!executionDoc) return
+    try {
+      await ExecutionLog.create({
+        executionId: executionDoc._id,
+        type,
+        message,
+        source,
+      })
+    } catch (err) {
+      await Execution.updateOne(
+        { _id: executionDoc._id },
+        { $push: { warnings: `log_persist_failed: ${err.message || 'unknown error'}` } }
+      )
+    }
   }
 
-  let chatDoc = null
+  const emit = (type, message, source = null) => {
+    send(type, message)
+    persistLog(type, message, source)
+  }
+
+  const onLog = (msg) => emit('log', msg, 'sandbox')
   try {
     chatDoc = await Chat.create({
       userId: req.user.userId,
@@ -50,23 +69,39 @@ router.post('/', auth, async (req, res) => {
   }
 
   try {
+    if (chatDoc) {
+      executionDoc = await Execution.create({
+        chatId: chatDoc._id,
+        repo,
+        owner,
+        prompt,
+        status: 'running',
+      })
+      await chatDoc.updateOne({ $push: { executions: executionDoc._id } })
+    }
+
     const { committed } = await runAgentInSandbox({
       repo,
       owner,
       prompt,
       githubToken,
-      onLog: collectingOnLog,
+      onLog,
       defaultBranch: defaultBranch || 'main',
     })
 
     if (!committed) {
-      send('warning', 'No changes were made by the agent.')
+      emit('warning', 'No changes were made by the agent.', 'server')
       send('done', null)
-      res.end()
+      if (executionDoc) {
+        await Execution.updateOne(
+          { _id: executionDoc._id },
+          { status: 'success', endedAt: new Date() }
+        )
+      }
       return
     }
 
-    onLog('Creating Pull Request...')
+    emit('log', 'Creating Pull Request...', 'server')
     const pr = await createPR({
       owner,
       repo,
@@ -75,7 +110,7 @@ router.post('/', auth, async (req, res) => {
       defaultBranch: defaultBranch || 'main',
     })
 
-    onLog(`Pull Request created: ${pr.url}`)
+    emit('log', `Pull Request created: ${pr.url}`, 'server')
     send('pr', { url: pr.url, number: pr.number, title: pr.title })
     send('done', null)
 
@@ -86,11 +121,23 @@ router.post('/', auth, async (req, res) => {
         $push: { messages: { role: 'assistant', content: `PR created: ${pr.url}` } },
       })
     }
+    if (executionDoc) {
+      await Execution.updateOne(
+        { _id: executionDoc._id },
+        { prUrl: pr.url, status: 'success', endedAt: new Date() }
+      )
+    }
   } catch (err) {
-    send('error', err.message || 'Execution failed')
+    emit('error', err.message || 'Execution failed', 'server')
     send('done', null)
     if (chatDoc) {
       await chatDoc.updateOne({ status: 'failed' })
+    }
+    if (executionDoc) {
+      await Execution.updateOne(
+        { _id: executionDoc._id },
+        { status: 'failed', error: err.message || 'Execution failed', endedAt: new Date() }
+      )
     }
   } finally {
     res.end()
