@@ -149,21 +149,21 @@ export default function RepositoryExplorerPage() {
     <div className="h-screen flex flex-col overflow-hidden bg-fixai-bg">
       {/* Top Navigation Bar */}
       <nav
-        className="h-14 border-b border-fixai-border bg-fixai-bg flex items-center justify-between px-4 z-50"
+        className="border-b border-fixai-border bg-fixai-bg flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 z-50 gap-3"
         data-purpose="top-navigation"
       >
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-3 sm:gap-6 w-full sm:w-auto">
           {/* Logo Section */}
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-fixai-cyan rounded flex items-center justify-center shadow-[0_0_10px_rgba(0,240,255,0.5)]">
               <span className="text-fixai-bg font-bold text-xl">PA</span>
             </div>
-            <span className="text-xl font-semibold tracking-tight text-white font-mono">
+            <span className="text-lg sm:text-xl font-semibold tracking-tight text-white font-mono hidden sm:inline">
               Plasma<span className="text-fixai-cyan">AI</span>
             </span>
           </div>
           {/* Search Input */}
-          <div className="relative w-96">
+          <div className="relative w-full sm:w-80 md:w-96">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg
                 className="h-4 w-4 text-gray-500"
@@ -180,7 +180,7 @@ export default function RepositoryExplorerPage() {
               </svg>
             </div>
             <input
-              className="block w-full pl-10 pr-3 py-1.5 bg-fixai-panel border border-fixai-border rounded-md text-sm text-gray-300 focus:ring-1 focus:ring-fixai-cyan focus:border-fixai-cyan transition-all outline-none"
+              className="block w-full pl-10 pr-3 py-2 bg-fixai-panel border border-fixai-border rounded-md text-sm text-gray-300 focus:ring-1 focus:ring-fixai-cyan focus:border-fixai-cyan transition-all outline-none"
               placeholder="Search repositories..."
               type="text"
               value={search}
@@ -188,11 +188,11 @@ export default function RepositoryExplorerPage() {
             />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => router.push('/history')}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium text-gray-300 hover:text-fixai-cyan hover:bg-fixai-panel border border-fixai-border transition-colors"
+            className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:text-fixai-cyan hover:bg-fixai-panel border border-fixai-border transition-colors w-full sm:w-auto justify-center"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -202,21 +202,21 @@ export default function RepositoryExplorerPage() {
         </div>
       </nav>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
         {/* Main Content Area (full-width list of repositories) */}
         <main
-          className="flex-1 overflow-y-auto custom-scrollbar p-6"
+          className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6"
           data-purpose="main-content"
         >
-          <header className="mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">Repository Explorer</h1>
+          <header className="mb-6 sm:mb-8">
+            <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">Repository Explorer</h1>
             <p className="text-gray-400 text-sm">
               Select a repository to start debugging with AI assistance.
             </p>
           </header>
 
           {/* Repository Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
             {loading && (
               <div className="text-xs text-gray-500">Loading repositories from GitHub…</div>
             )}
@@ -228,11 +228,11 @@ export default function RepositoryExplorerPage() {
               filteredRepos.map((repo) => (
                 <div
                   key={repo.id}
-                  className="glass-card p-5 rounded-lg flex flex-col justify-between h-56"
+                  className="glass-card p-4 sm:p-5 rounded-lg flex flex-col justify-between min-h-[180px]"
                 >
                   <div>
                     <div className="flex justify-between items-start mb-4">
-                      <h3 className="font-mono text-lg text-white font-semibold truncate">
+                    <h3 className="font-mono text-base sm:text-lg text-white font-semibold truncate">
                         {repo.name}
                       </h3>
                       <span
@@ -245,7 +245,7 @@ export default function RepositoryExplorerPage() {
                         {privacyLabel(repo)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-400 mb-2">
+                    <div className="flex items-center gap-3 text-xs text-gray-400 mb-2">
                       <span className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />{' '}
                         <span>{repo.owner}</span>
@@ -270,11 +270,11 @@ export default function RepositoryExplorerPage() {
 
         {/* Right Sidebar */}
         <aside
-          className="w-80 bg-fixai-panel border-l border-fixai-border p-6 flex flex-col gap-8"
+          className="w-full lg:w-80 bg-fixai-panel border-t lg:border-t-0 lg:border-l border-fixai-border p-4 sm:p-6 flex flex-col gap-6 overflow-y-auto h-[30vh] sm:h-auto"
           data-purpose="right-sidebar"
         >
-          <div>
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-6">
+          <div className="order-2 lg:order-0">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 sm:mb-6">
               Repository Stats
             </h2>
             <div className="space-y-6">
@@ -319,7 +319,7 @@ export default function RepositoryExplorerPage() {
             </div>
           </div>
 
-          <div className="border-t border-fixai-border pt-6">
+          <div className="border-t border-fixai-border pt-6 order-1 lg:order-0">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
               Active Contributors
             </h2>

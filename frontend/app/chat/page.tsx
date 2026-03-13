@@ -366,25 +366,25 @@ function ChatPageInner() {
     >
       {/* Header — fixed at top */}
       <header
-        className="h-14 flex items-center px-6 justify-between shrink-0 z-50"
+        className="h-14 flex items-center px-4 md:px-6 justify-between shrink-0 z-50"
         style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <button
             onClick={() => router.push('/dashboard')}
-            className="text-sm opacity-60 hover:opacity-100 transition-opacity"
+            className="text-xs sm:text-sm opacity-60 hover:opacity-100 transition-opacity shrink-0"
           >
             ← Dashboard
           </button>
-          <span style={{ color: 'var(--color-border)' }}>|</span>
+          <span style={{ color: 'var(--color-border)' }} className="hidden sm:inline">|</span>
           <span
-            className="text-sm font-mono px-2 py-0.5 rounded"
+            className="text-xs sm:text-sm font-mono px-2 py-0.5 rounded truncate"
             style={{ background: 'var(--color-bg)', color: 'var(--color-accent)' }}
           >
             {repoLabel}
           </span>
           {defaultBranch && (
-            <span className="text-xs opacity-40">@ {defaultBranch}</span>
+            <span className="text-[10px] sm:text-xs opacity-40 hidden sm:inline">@ {defaultBranch}</span>
           )}
         </div>
 
@@ -393,7 +393,7 @@ function ChatPageInner() {
           <button
             onClick={handleExecute}
             disabled={isExecuting || isLoading}
-            className="btn-primary text-sm"
+            className="btn-primary text-xs sm:text-sm"
           >
             {isExecuting ? (
               <>
@@ -408,20 +408,18 @@ function ChatPageInner() {
       </header>
 
       {/* Body: two-column, full width left-to-right; only chat and plan panels scroll */}
-      <div className="flex flex-1 min-h-0 w-full">
+      <div className="flex flex-1 min-h-0 w-full flex-col lg:flex-row">
         {/* ─── Left: chat thread ─── */}
         <div
-          className="flex flex-col min-h-0 shrink-0"
+          className={`flex flex-col min-h-0 w-full ${hasPlan ? 'lg:w-[42%] lg:min-w-[320px] lg:shrink-0' : ''} ${hasPlan ? 'border-b lg:border-b-0 lg:border-r' : ''}`}
           style={{
-            width: hasPlan ? '42%' : '100%',
-            minWidth: hasPlan ? '320px' : undefined,
-            borderRight: hasPlan ? '1px solid var(--color-border)' : 'none',
+            borderColor: 'var(--color-border)',
             transition: 'width 0.3s ease',
           }}
         >
           {/* Messages — only this area scrolls (vertical) */}
           <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+          <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-5 space-y-4">
             {messages.length === 0 && !isLoading && (
               <div className="flex flex-col items-center justify-center h-full gap-3 opacity-40 text-sm select-none">
                 <svg
@@ -464,11 +462,11 @@ function ChatPageInner() {
                 return (
                   <div key={i} className="flex justify-start">
                     <div
-                      className="max-w-[92%] rounded-2xl px-4 py-3 text-xs"
+                      className="max-w-full sm:max-w-[92%] rounded-2xl px-4 py-3 text-xs"
                       style={{
                         background: 'rgba(99,102,241,0.07)',
                         border: '1px solid rgba(99,102,241,0.22)',
-                        minWidth: '220px',
+                        minWidth: '180px',
                       }}
                     >
                       <div className="flex items-center gap-2 mb-2" style={{ color: 'rgba(165,180,252,0.85)' }}>
@@ -573,7 +571,7 @@ function ChatPageInner() {
 
           {/* Input — fixed at bottom of chat panel; stays visible when messages scroll */}
           <div
-            className="shrink-0 py-3 px-4"
+            className="shrink-0 py-3 px-3 sm:px-4"
             style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
           >
             <div className="max-w-2xl mx-auto">
@@ -609,7 +607,7 @@ function ChatPageInner() {
                 <button
                   onClick={handleSend}
                   disabled={isLoading || isExecuting || !input.trim()}
-                  className="btn-primary text-sm shrink-0 self-end"
+                  className="btn-primary text-xs sm:text-sm shrink-0 self-end"
                   style={{ padding: '0.4rem 1rem', marginBottom: '2px' }}
                 >
                   {isLoading ? (
@@ -628,10 +626,10 @@ function ChatPageInner() {
 
         {/* ─── Right: plan panel (only when plan exists); only this area scrolls (vertical + horizontal) ─── */}
         {hasPlan && (
-          <div className="flex flex-col min-h-0 min-w-0 flex-1">
+          <div className="flex flex-col min-h-0 min-w-0 flex-1 border-t lg:border-t-0" style={{ borderColor: 'var(--color-border)' }}>
             {/* Panel header — fixed, no scroll */}
             <div
-              className="flex items-center gap-2 px-5 py-3 shrink-0"
+              className="flex items-center gap-2 px-4 sm:px-5 py-3 shrink-0"
               style={{
                 borderBottom: '1px solid var(--color-border)',
                 background: 'var(--color-surface)',
@@ -662,10 +660,10 @@ function ChatPageInner() {
 
             {/* Plan content — scrolls vertically only */}
             <div
-              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6"
+              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6"
               style={{ background: 'var(--color-bg)' }}
             >
-              <div className="prose prose-invert prose-sm max-w-none min-w-0 prose-pre:whitespace-pre-wrap prose-pre:break-words">
+              <div className="prose prose-invert prose-sm max-w-none min-w-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:overflow-x-auto">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={markdownComponents}

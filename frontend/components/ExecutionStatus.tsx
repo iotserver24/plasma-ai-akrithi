@@ -25,7 +25,7 @@ export default function ExecutionStatus({ stage }: Props) {
   if (stage === 'idle') return null
 
   return (
-    <div className="flex items-center gap-0">
+    <div className="flex items-center gap-0 overflow-x-auto">
       {STEPS.map((step, i) => {
         const stepIdx = stageIndex(step.key)
         const currentIdx = stageIndex(stage)

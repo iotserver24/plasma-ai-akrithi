@@ -315,27 +315,27 @@ function CodePageInner() {
       style={{ height: '100vh', background: 'var(--color-bg)', color: 'var(--color-text)', overflow: 'hidden' }}>
 
       {/* ── Header ── */}
-      <header className="h-14 shrink-0 flex items-center px-6 gap-4"
+      <header className="shrink-0 flex items-center px-4 sm:px-6 gap-3 sm:gap-4 py-3 sm:py-0"
         style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
         <button
           onClick={() => execution?.chatId ? router.push(`/chat?id=${execution.chatId}`) : router.push('/dashboard')}
-          className="text-sm opacity-60 hover:opacity-100 transition-opacity">
+          className="text-xs sm:text-sm opacity-60 hover:opacity-100 transition-opacity shrink-0">
           ← Back
         </button>
-        <span style={{ color: 'var(--color-border)' }}>|</span>
+        <span style={{ color: 'var(--color-border)' }} className="hidden sm:inline">|</span>
         {execution && (
-          <span className="text-sm font-mono px-2 py-0.5 rounded"
+          <span className="text-xs sm:text-sm font-mono px-2 py-0.5 rounded truncate"
             style={{ background: 'var(--color-bg)', color: 'var(--color-accent)' }}>
             {execution.owner}/{execution.repo}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
           {execution && (
             <>
               <span className="w-2 h-2 rounded-full" style={{ background: statusColor, boxShadow: `0 0 6px ${statusColor}` }} />
-              <span className="text-xs font-mono font-bold" style={{ color: statusColor }}>{statusLabel}</span>
+              <span className="text-[10px] sm:text-xs font-mono font-bold" style={{ color: statusColor }}>{statusLabel}</span>
               {execution.startedAt && (
-                <span className="text-xs opacity-40">{elapsed(execution.startedAt, execution.endedAt)}</span>
+                <span className="text-[10px] sm:text-xs opacity-40 hidden sm:inline">{elapsed(execution.startedAt, execution.endedAt)}</span>
               )}
             </>
           )}
@@ -343,7 +343,7 @@ function CodePageInner() {
       </header>
 
       {/* ── Body ── */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
 
         {/* ── Left: log terminal ── */}
         <div className="flex flex-col flex-1 min-w-0">
@@ -384,7 +384,7 @@ function CodePageInner() {
           <div
             ref={logsScrollRef}
             onScroll={handleLogsScroll}
-            className="flex-1 overflow-y-auto"
+            className="flex-1 overflow-y-auto overflow-x-auto"
             style={{ background: '#0a0c10', fontFamily: 'var(--font-geist-mono), "Cascadia Code", "Fira Code", monospace' }}>
 
             {fetchError && (
@@ -503,8 +503,10 @@ function CodePageInner() {
         </div>
 
         {/* ── Right: fixed metadata panel ── */}
-        <div className="shrink-0 flex flex-col overflow-y-auto"
-          style={{ width: '288px', borderLeft: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+        <div
+          className="shrink-0 flex flex-col overflow-y-auto w-full lg:w-72 border-t lg:border-t-0 lg:border-l"
+          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+        >
 
           {/* PR card */}
           {execution?.prUrl && (
@@ -550,7 +552,7 @@ function CodePageInner() {
                 ].map(({ label, value, accent, color, mono }) => (
                   <div key={label}>
                     <p className="text-[10px] uppercase opacity-40 mb-0.5">{label}</p>
-                    <p className={`text-xs leading-5 break-words ${mono ? 'font-mono' : ''}`}
+                    <p className={`text-xs leading-5 wrap-break-word ${mono ? 'font-mono' : ''}`}
                       style={{ color: color || (accent ? 'var(--color-accent)' : undefined), opacity: color || accent ? 1 : 0.8 }}>
                       {value}
                     </p>
@@ -560,7 +562,7 @@ function CodePageInner() {
                 {execution.error && (
                   <div>
                     <p className="text-[10px] uppercase mb-0.5" style={{ color: '#f87171' }}>Error</p>
-                    <p className="text-xs break-words leading-5" style={{ color: '#f87171' }}>{execution.error}</p>
+                    <p className="text-xs wrap-break-word leading-5" style={{ color: '#f87171' }}>{execution.error}</p>
                   </div>
                 )}
 

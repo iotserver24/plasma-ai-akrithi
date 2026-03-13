@@ -39,7 +39,7 @@ export default function MissionControlPage() {
   return (
     <main className="bg-fixai-bg text-gray-300 font-mono min-h-screen overflow-hidden selection:bg-fixai-cyan selection:text-black">
       {/* Main Dashboard Layout */}
-      <div className="h-screen w-full p-6 flex flex-col gap-6 relative overflow-hidden">
+      <div className="h-screen w-full p-4 sm:p-6 flex flex-col gap-6 relative overflow-hidden">
         {/* Decorative Scanline Overlay */}
         <div className="pointer-events-none absolute inset-0 w-full h-full z-50 opacity-[0.03] overflow-hidden">
           <div className="w-full h-1 bg-white animate-scanline" />
@@ -47,10 +47,10 @@ export default function MissionControlPage() {
 
         {/* Header Section */}
         <header
-          className="glass-panel rounded-lg p-4 flex justify-between items-center glow-border-cyan"
+          className="glass-panel rounded-lg p-4 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 glow-border-cyan"
           data-purpose="mission-control-header"
         >
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-fixai-cyan rounded-full animate-pulse" />
               <h1 className="text-xl font-bold tracking-widest text-white uppercase">
@@ -67,7 +67,7 @@ export default function MissionControlPage() {
               </span>
             </div>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-3 flex-wrap">
             {/* Status Badges */}
             <div className="flex items-center gap-2 px-3 py-1 bg-black/40 border border-fixai-lime/40 rounded text-xs">
               <span className="text-fixai-lime">✓</span>
@@ -84,15 +84,15 @@ export default function MissionControlPage() {
           </div>
         </header>
 
-        <div className="flex flex-1 gap-6 min-h-0">
+        <div className="flex flex-1 gap-6 min-h-0 flex-col lg:flex-row">
           {/* Center Content Area */}
           <section className="flex-1 flex flex-col gap-6 min-w-0">
             {/* Pipeline Visualizer */}
             <div
-              className="glass-panel rounded-lg p-8 flex flex-col justify-center items-center relative"
+              className="glass-panel rounded-lg p-4 sm:p-8 flex flex-col justify-center items-center relative overflow-x-auto"
               data-purpose="pipeline-container"
             >
-              <div className="w-full flex justify-between items-center relative">
+              <div className="w-full min-w-[720px] flex justify-between items-center relative">
                 {/* Connection Lines */}
                 <div className="absolute top-1/2 left-0 w-full h-[2px] bg-gray-800 -translate-y-1/2 z-0" />
                 {/* Completed Line Progress */}
@@ -269,7 +269,7 @@ export default function MissionControlPage() {
           </section>
 
           {/* Side Panel */}
-          <aside className="w-80 flex flex-col gap-6" data-purpose="metrics-sidebar">
+          <aside className="w-full lg:w-80 flex flex-col gap-6" data-purpose="metrics-sidebar">
             {/* AI Confidence Chart */}
             <div className="glass-panel rounded-lg p-6 glow-border-lime flex flex-col items-center">
               <h3 className="text-[10px] text-gray-500 uppercase font-bold self-start mb-6 tracking-wider">

@@ -81,12 +81,12 @@ export default function HistoryPage() {
   return (
     <div className="min-h-screen flex flex-col bg-fixai-bg text-white">
       {/* Nav */}
-      <nav className="h-14 border-b border-fixai-border bg-fixai-bg flex items-center justify-between px-4">
-        <div className="flex items-center gap-4">
+      <nav className="border-b border-fixai-border bg-fixai-bg flex items-center justify-between px-4 py-2 flex-wrap gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <button
             type="button"
             onClick={() => router.push('/repository-explorer')}
-            className="flex items-center gap-2 text-gray-400 hover:text-fixai-cyan transition-colors"
+            className="flex items-center gap-2 text-gray-400 hover:text-fixai-cyan transition-colors text-sm"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -104,9 +104,9 @@ export default function HistoryPage() {
         </div>
       </nav>
 
-      <main className="flex-1 overflow-hidden flex flex-col p-6">
+      <main className="flex-1 overflow-hidden flex flex-col p-4 sm:p-6">
         <div className="shrink-0 mb-4">
-          <h1 className="text-2xl font-bold mb-1">History</h1>
+          <h1 className="text-xl sm:text-2xl font-bold mb-1">History</h1>
           <p className="text-gray-400 text-sm">Chat and execution history.</p>
         </div>
 

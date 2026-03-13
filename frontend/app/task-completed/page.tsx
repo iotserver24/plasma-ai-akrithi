@@ -1,7 +1,7 @@
 export default function TaskCompletedPage() {
   return (
     <main
-      className="bg-brand-dark text-slate-200 min-h-screen flex items-center justify-center p-4"
+      className="bg-brand-dark text-slate-200 min-h-screen flex items-center justify-center p-4 sm:p-6"
       data-purpose="completion-screen"
     >
       <div className="max-w-4xl w-full space-y-8">
@@ -25,7 +25,7 @@ export default function TaskCompletedPage() {
               />
             </svg>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight text-white">
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
             AI Task Completed Successfully
           </h1>
           <p className="text-slate-400 font-mono text-sm tracking-widest uppercase">
@@ -110,7 +110,7 @@ export default function TaskCompletedPage() {
           data-purpose="action-buttons"
         >
           <button
-            className="w-full md:w-auto px-12 py-4 bg-brand-cyan hover:bg-cyan-500 text-brand-dark font-bold rounded-lg transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+            className="w-full sm:w-auto px-10 sm:px-12 py-4 bg-brand-cyan hover:bg-cyan-500 text-brand-dark font-bold rounded-lg transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(6,182,212,0.3)]"
             type="button"
           >
             View Pull Request
