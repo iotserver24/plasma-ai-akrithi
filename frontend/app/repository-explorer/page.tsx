@@ -204,17 +204,6 @@ export default function RepositoryExplorerPage() {
               />
             </svg>
           </button>
-          <div className="flex items-center gap-2 pl-4 border-l border-fixai-border">
-            <div className="text-right">
-              <p className="text-xs font-medium text-white">dev_alex</p>
-              <p className="text-[10px] text-fixai-cyan uppercase tracking-wider">Pro Tier</p>
-            </div>
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-fixai-cyan to-blue-500 p-[1px]">
-              <div className="w-full h-full rounded-full bg-fixai-bg flex items-center justify-center overflow-hidden">
-                <span className="text-xs font-mono">AX</span>
-              </div>
-            </div>
-          </div>
         </div>
       </nav>
 
