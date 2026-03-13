@@ -9,6 +9,7 @@ import githubRoutes from './routes/github.routes.js'
 import executeRoutes from './routes/execute.routes.js'
 import chatRoutes from './routes/chat.routes.js'
 import executionRoutes from './routes/execution.routes.js'
+import planRoutes from './routes/plan.routes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -29,6 +30,7 @@ app.use('/api/github', githubRoutes)
 app.use('/api/execute', executeRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/execution', executionRoutes)
+app.use('/api/plan', planRoutes)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' })

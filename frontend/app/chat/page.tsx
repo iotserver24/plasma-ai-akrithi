@@ -1,279 +1,524 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import ReactMarkdown from 'react-markdown'
+import { getToken } from '../../lib/api'
+
+interface Message {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 interface StoredRepo {
   name: string
   full_name: string
+  owner?: string
   default_branch?: string
 }
 
-export default function DeveloperInterfacePage() {
-  const router = useRouter()
-  const [prompt, setPrompt] = useState('')
-  const [isThinking, setIsThinking] = useState(false)
-  const [hasPlan, setHasPlan] = useState(false)
-  const [repoName, setRepoName] = useState('payment-api')
-  const [branchName, setBranchName] = useState('main')
-  const [error, setError] = useState('')
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
+/** Split accumulated text into the chat message (outside tags) and plan (inside <plan>…</plan>). */
+function parsePlanTags(text: string): { message: string; plan: string } {
+  const startIdx = text.indexOf('<plan>')
+  const endIdx = text.indexOf('</plan>')
+
+  if (startIdx === -1) {
+    // No plan tag yet — everything is a chat message
+    return { message: text, plan: '' }
+  }
+
+  if (endIdx === -1) {
+    // Plan tag opened but not closed yet (streaming in progress)
+    const message = text.slice(0, startIdx).trim()
+    const plan = text.slice(startIdx + 6) // content after <plan>
+    return { message, plan }
+  }
+
+  // Both tags present — complete plan
+  const before = text.slice(0, startIdx).trim()
+  const after = text.slice(endIdx + 7).trim()
+  const message = [before, after].filter(Boolean).join('\n\n')
+  const plan = text.slice(startIdx + 6, endIdx).trim()
+  return { message, plan }
+}
+
+export default function ChatPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Capture the ID that was in the URL when the page first loaded.
+  // We only hydrate from the server for that initial load — not when we
+  // programmatically push a new id via router.replace during a send.
+  const initialChatId = useRef(searchParams.get('id'))
+
+  const [messages, setMessages] = useState<Message[]>([])
+  const [plan, setPlan] = useState<string>('')
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [error, setError] = useState('')
+  const [repo, setRepo] = useState('')
+  const [owner, setOwner] = useState('')
+  const [defaultBranch, setDefaultBranch] = useState('main')
+  const [currentChatId, setCurrentChatId] = useState<string | null>(initialChatId.current)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Load repo from localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return
     const stored = window.localStorage.getItem('selectedRepo')
     if (!stored) return
     try {
       const parsed: StoredRepo = JSON.parse(stored)
-      const name = parsed.name || parsed.full_name || repoName
-      const branch = parsed.default_branch || branchName
-      setRepoName(name)
-      setBranchName(branch)
-    } catch {
-      // ignore parse errors and keep defaults
-    }
+      setRepo(parsed.name || parsed.full_name?.split('/')[1] || '')
+      setOwner(parsed.owner || parsed.full_name?.split('/')[0] || '')
+      setDefaultBranch(parsed.default_branch || 'main')
+    } catch {}
   }, [])
 
-  function isValidPrompt(text: string) {
-    const t = text.trim().toLowerCase()
-    if (t.length < 20) return false
-    const trivial = ['hi', 'hey', 'hello', 'bye', 'ok', 'thanks', 'thank you']
-    if (trivial.includes(t)) return false
-    const intentWords = ['add', 'update', 'create', 'remove', 'delete', 'refactor', 'fix', 'implement', 'change']
-    return intentWords.some((w) => t.includes(w))
-  }
+  // Hydrate only when an id was present on initial page load (e.g. direct link or refresh)
+  useEffect(() => {
+    const id = initialChatId.current
+    if (!id) return
 
-  function handleGeneratePlan() {
-    if (!prompt.trim()) {
-      setError('Please describe a change first.')
-      return
-    }
-    if (!isValidPrompt(prompt)) {
-      setError('I’m here for bugs, commits, and PRs… not tea and chit-chat')
+    fetch(`${BASE_URL}/chat/${id}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((data: { chat?: { messages: Message[]; plan?: string } }) => {
+        if (!data.chat) return
+        const visible = (data.chat.messages || []).filter(
+          (m) => m.role === 'user' || m.role === 'assistant',
+        )
+        setMessages(visible)
+        if (data.chat.plan) setPlan(data.chat.plan)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isLoading])
+
+  async function handleSend() {
+    const text = input.trim()
+    if (!text || isLoading || isExecuting) return
+    if (!repo || !owner) {
+      setError('No repository selected. Go back and pick a repo first.')
       return
     }
 
     setError('')
-    setIsThinking(true)
+    setInput('')
+    setIsLoading(true)
 
-    // Simulate AI plan generation like the original script.
-    setTimeout(() => {
-      setIsThinking(false)
-      setHasPlan(true)
-    }, 1500)
+    // Add user message immediately
+    setMessages((prev) => [...prev, { role: 'user', content: text }])
+    // Reserve an assistant slot for streaming
+    setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+
+    const token = getToken()
+
+    try {
+      const response = await fetch(`${BASE_URL}/plan`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          prompt: text,
+          repo,
+          owner,
+          ...(currentChatId ? { chatId: currentChatId } : {}),
+        }),
+      })
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error((errData as { error?: string }).error || 'Request failed')
+      }
+
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let accumulated = ''
+      let lineBuf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        lineBuf += decoder.decode(value, { stream: true })
+        const lines = lineBuf.split('\n')
+        lineBuf = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const payload = JSON.parse(line.slice(6)) as {
+              type: string
+              data: Record<string, unknown>
+            }
+
+            if (payload.type === 'chatId') {
+              const id = payload.data.chatId as string
+              if (!currentChatId) {
+                setCurrentChatId(id)
+                router.replace(`/chat?id=${id}`)
+              }
+            }
+
+            if (payload.type === 'chunk') {
+              accumulated += payload.data.content as string
+              const { message, plan: planChunk } = parsePlanTags(accumulated)
+              // Update streaming assistant message
+              setMessages((prev) => [
+                ...prev.slice(0, -1),
+                { role: 'assistant', content: message },
+              ])
+              if (planChunk) setPlan(planChunk)
+            }
+
+            if (payload.type === 'done') {
+              const { message, plan: finalPlan } = parsePlanTags(accumulated)
+              setMessages((prev) => [
+                ...prev.slice(0, -1),
+                { role: 'assistant', content: message || '✓ Plan generated.' },
+              ])
+              if (finalPlan) setPlan(finalPlan)
+            }
+
+            if (payload.type === 'error') {
+              setError((payload.data.message as string) || 'Error generating plan.')
+              setMessages((prev) => prev.slice(0, -1)) // remove empty assistant slot
+            }
+          } catch {
+            // ignore parse errors for individual SSE lines
+          }
+        }
+      }
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'Failed to generate plan.')
+      setMessages((prev) => {
+        // remove empty assistant slot and optimistic user message
+        const withoutAssistant = prev.slice(0, -1)
+        return withoutAssistant[withoutAssistant.length - 1]?.content === text
+          ? withoutAssistant.slice(0, -1)
+          : withoutAssistant
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const executeDisabled = !hasPlan
+  async function handleExecute() {
+    if (!plan || !repo || !owner || isExecuting || isLoading) return
+    setIsExecuting(true)
+    setError('')
 
-  function handleExecute() {
-    if (executeDisabled) return
-    router.push('/mission-control')
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')
+    const prompt = lastUserMsg?.content || plan
+    const token = getToken()
+
+    try {
+      const response = await fetch(`${BASE_URL}/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          prompt,
+          repo,
+          owner,
+          defaultBranch,
+          ...(currentChatId ? { chatId: currentChatId } : {}),
+        }),
+      })
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error((errData as { error?: string }).error || 'Execution failed')
+      }
+
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let redirected = false
+      let lineBuf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (redirected) continue
+
+        lineBuf += decoder.decode(value, { stream: true })
+        const lines = lineBuf.split('\n')
+        lineBuf = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const payload = JSON.parse(line.slice(6)) as { type: string; data: Record<string, unknown> }
+            if (payload.type === 'execution' && payload.data.id) {
+              redirected = true
+              router.push(`/code?id=${payload.data.id}`)
+            }
+          } catch {}
+        }
+      }
+
+      if (!redirected) router.push('/dashboard')
+    } catch (err: unknown) {
+      setError((err as Error)?.message || 'Execution failed.')
+      setIsExecuting(false)
+    }
   }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  const repoLabel = owner && repo ? `${owner}/${repo}` : repo || 'No repo selected'
+  const hasPlan = plan.trim().length > 0
 
   return (
-    <div className="bg-dark-bg text-gray-300 font-mono min-h-screen flex flex-col">
-      {/* MainHeader */}
-      <header className="h-14 border-b border-white/10 flex items-center px-6 justify-between bg-dark-bg/80 sticky top-0 z-50">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-accent-cyan shadow-[0_0_8px_#00f2ff]" />
-          <h1 className="text-xl font-bold tracking-tighter text-white">
-            Fix<span className="text-accent-cyan">AI</span>
-          </h1>
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
+    >
+      {/* Header */}
+      <header
+        className="h-14 flex items-center px-6 justify-between sticky top-0 z-50 shrink-0"
+        style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
+      >
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="text-sm opacity-60 hover:opacity-100 transition-opacity"
+          >
+            ← Dashboard
+          </button>
+          <span style={{ color: 'var(--color-border)' }}>|</span>
+          <span
+            className="text-sm font-mono px-2 py-0.5 rounded"
+            style={{ background: 'var(--color-bg)', color: 'var(--color-accent)' }}
+          >
+            {repoLabel}
+          </span>
+          {defaultBranch && (
+            <span className="text-xs opacity-40">@ {defaultBranch}</span>
+          )}
         </div>
-        <div className="flex items-center gap-4 text-xs">
-          <span className="text-white/40">v1.2.4-stable</span>
-          <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-            <span className="text-accent-lime">JD</span>
-          </div>
-        </div>
+
+        {/* Single Execute button — only in the header */}
+        {hasPlan && (
+          <button
+            onClick={handleExecute}
+            disabled={isExecuting || isLoading}
+            className="btn-primary text-sm"
+          >
+            {isExecuting ? (
+              <>
+                <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
+                Running…
+              </>
+            ) : (
+              '▶ Execute'
+            )}
+          </button>
+        )}
       </header>
 
-      {/* LayoutWrapper */}
-      <main className="flex-1 flex overflow-hidden p-4 gap-4">
-        {/* LeftPanel - Repo Info */}
-        <aside
-          className="w-64 glass-panel flex flex-col overflow-hidden"
-          data-purpose="repository-sidebar"
+      {/* Body: two-column */}
+      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 3.5rem)' }}>
+        {/* ─── Left: chat thread ─── */}
+        <div
+          className="flex flex-col"
+          style={{
+            width: hasPlan ? '42%' : '100%',
+            borderRight: hasPlan ? '1px solid var(--color-border)' : 'none',
+            transition: 'width 0.3s ease',
+          }}
         >
-          <div className="p-4 border-b border-white/5 bg-white/5">
-            <h2 className="text-xs uppercase tracking-widest text-accent-cyan font-bold mb-4">
-              Active Repository
-            </h2>
-            <div className="flex items-center gap-3 p-2 bg-black/40 border border-white/10 rounded">
-              <svg
-                className="w-5 h-5 text-accent-lime"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                />
-              </svg>
-              <span className="text-sm font-medium text-white truncate">{repoName}</span>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs terminal-scrollbar">
-            <div>
-              <p className="text-white/40 mb-1">Branch</p>
-              <p className="text-accent-lime">{branchName}</p>
-            </div>
-            <div>
-              <p className="text-white/40 mb-1">Last Commit</p>
-              <p className="font-mono truncate">a8f2c31 [Add CORS support]</p>
-            </div>
-            <div>
-              <p className="text-white/40 mb-1">Language</p>
-              <p>TypeScript / Node.js</p>
-            </div>
-            <div className="pt-4 border-t border-white/5">
-              <h3 className="text-white/60 mb-2 uppercase text-[10px]">Recent Branches</h3>
-              <ul className="space-y-2 text-white/40">
-                <li className="hover:text-accent-cyan cursor-pointer">fix/auth-leak</li>
-                <li className="hover:text-accent-cyan cursor-pointer">feat/stripe-v3</li>
-                <li className="hover:text-accent-cyan cursor-pointer">refactor/error-handler</li>
-              </ul>
-            </div>
-          </div>
-        </aside>
-
-        {/* Center: Chat-style conversation + prompt */}
-        <section className="flex-1 flex flex-col gap-4">
-          <div className="glass-panel flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-              {/* Chat messages */}
-              {!prompt && !hasPlan && (
-                <p className="text-sm text-gray-500 text-center mt-10">
-                  Start by describing a change you want to make to this repository.
-                </p>
-              )}
-              {prompt && (
-                <div className="self-end max-w-[80%] rounded-2xl bg-accent-cyan/10 border border-accent-cyan/40 px-4 py-3 text-sm text-accent-cyan">
-                  <p className="text-[10px] uppercase tracking-wide mb-1 text-accent-cyan/70">
-                    You
-                  </p>
-                  <p>{prompt}</p>
-                </div>
-              )}
-              {hasPlan && (
-                <div className="self-start max-w-[80%] rounded-2xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-gray-100">
-                  <p className="text-[10px] uppercase tracking-wide mb-1 text-gray-400">
-                    AI Plan
-                  </p>
-                  <ul className="space-y-1.5 text-xs text-gray-300">
-                    <li>1. Create an isolated sandbox for {repoName}.</li>
-                    <li>
-                      2. Clone <span className="text-accent-cyan">{repoName}:{branchName}</span> and
-                      install dependencies.
-                    </li>
-                    <li>3. Run the coding agent to apply the requested changes.</li>
-                    <li>4. Commit the diff with a semantic message.</li>
-                    <li>5. Push a new branch and open a Pull Request.</li>
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            {/* Prompt input + validation error */}
-            <div className="border-t border-white/5 p-4">
-              {error && (
-                <p className="mb-2 text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded px-3 py-1.5">
-                  {error}
-                </p>
-              )}
-              <label className="text-xs text-accent-cyan mb-2 flex items-center gap-2">
-                <span className="text-lg">&gt;</span> Describe your change:
-              </label>
-              <div className="flex gap-2 items-end">
-                <textarea
-                  id="ai-prompt-input"
-                  className="flex-1 bg-transparent border border-white/10 rounded-md focus:ring-0 text-sm md:text-base text-white resize-none placeholder-white/20 px-3 py-2 h-20"
-                  placeholder="Add rate limiting to login API..."
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                />
-                <button
-                  id="generate-plan-btn"
-                  onClick={handleGeneratePlan}
-                  className="px-4 py-2 bg-accent-cyan/10 border border-accent-cyan text-accent-cyan rounded-md text-xs font-bold uppercase tracking-wider hover:bg-accent-cyan hover:text-black transition-all shadow-cyan-glow active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-                  disabled={isThinking}
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {messages.length === 0 && !isLoading && (
+              <div className="flex flex-col items-center justify-center h-full gap-3 opacity-40 text-sm select-none">
+                <svg
+                  width="40"
+                  height="40"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1}
                 >
-                  {isThinking ? 'Analyzing...' : hasPlan ? 'Regenerate Plan' : 'Generate Plan'}
-                </button>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 10h.01M12 10h.01M16 10h.01M21 16c0 1.1-.9 2-2 2H5l-4 4V6c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v10z"
+                  />
+                </svg>
+                <p>Describe a change and the AI will plan it for you.</p>
+                {(!repo || !owner) && (
+                  <p className="text-xs" style={{ color: 'var(--color-accent)' }}>
+                    No repo selected —{' '}
+                    <button
+                      onClick={() => router.push('/repository-explorer')}
+                      className="underline"
+                    >
+                      pick a repository
+                    </button>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {messages.map((msg, i) => {
+              const isLast = i === messages.length - 1
+              const streaming = isLoading && isLast && msg.role === 'assistant'
+              return (
+                <div
+                  key={i}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className="max-w-[88%] rounded-2xl px-4 py-3 text-sm"
+                    style={
+                      msg.role === 'user'
+                        ? {
+                            background: 'rgba(0,229,160,0.1)',
+                            border: '1px solid rgba(0,229,160,0.35)',
+                          }
+                        : {
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
+                          }
+                    }
+                  >
+                    <p className="text-[10px] uppercase tracking-wide mb-1 opacity-40">
+                      {msg.role === 'user' ? 'You' : 'AI Planner'}
+                    </p>
+                    {msg.content ? (
+                      <p className="whitespace-pre-wrap leading-6 opacity-90">{msg.content}</p>
+                    ) : streaming ? (
+                      <span className="opacity-40 text-xs">Thinking…</span>
+                    ) : null}
+                    {streaming && (
+                      <span
+                        className="inline-block w-1.5 h-4 ml-0.5 rounded-sm animate-pulse"
+                        style={{ background: 'var(--color-accent)', verticalAlign: 'text-bottom' }}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div
+            className="shrink-0 p-4"
+            style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
+          >
+            {error && (
+              <p
+                className="mb-2 text-xs px-3 py-1.5 rounded"
+                style={{
+                  background: 'rgba(239,68,68,0.1)',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#f87171',
+                }}
+              >
+                {error}
+              </p>
+            )}
+            <div className="flex gap-2 items-end">
+              <textarea
+                className="input-field resize-none text-sm"
+                style={{ height: '72px' }}
+                placeholder={
+                  hasPlan
+                    ? 'Refine the plan or ask for changes…'
+                    : 'Describe a change to make to this repo…'
+                }
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading || isExecuting}
+              />
+              <button
+                onClick={handleSend}
+                disabled={isLoading || isExecuting || !input.trim()}
+                className="btn-primary text-sm shrink-0"
+                style={{ height: '72px', padding: '0 1.2rem' }}
+              >
+                {isLoading ? (
+                  <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
+                ) : hasPlan ? (
+                  'Refine'
+                ) : (
+                  'Plan'
+                )}
+              </button>
+            </div>
+            <p className="text-[10px] opacity-25 mt-1">Enter to send · Shift+Enter for newline</p>
+          </div>
+        </div>
+
+        {/* ─── Right: plan panel (only when plan exists) ─── */}
+        {hasPlan && (
+          <div className="flex flex-col overflow-hidden" style={{ flex: 1 }}>
+            {/* Panel header — NO execute button here */}
+            <div
+              className="flex items-center gap-2 px-5 py-3 shrink-0"
+              style={{
+                borderBottom: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+              }}
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{
+                  background: 'var(--color-accent)',
+                  boxShadow: '0 0 6px var(--color-accent)',
+                }}
+              />
+              <h2
+                className="text-xs font-bold uppercase tracking-widest"
+                style={{ color: 'var(--color-accent)' }}
+              >
+                Execution Plan
+              </h2>
+              {isLoading && (
+                <span
+                  className="ml-auto text-[10px] opacity-50 flex items-center gap-1"
+                >
+                  <span className="animate-spin inline-block w-2.5 h-2.5 border border-current border-t-transparent rounded-full" />
+                  Streaming…
+                </span>
+              )}
+            </div>
+
+            {/* Plan content */}
+            <div
+              className="flex-1 overflow-y-auto p-6"
+              style={{ background: 'var(--color-bg)' }}
+            >
+              <div className="prose prose-invert prose-sm max-w-none">
+                <ReactMarkdown>{plan}</ReactMarkdown>
               </div>
             </div>
           </div>
-
-          {/* Right: Simple AI plan summary card (mirrors chat bubble) */}
-          <aside className="w-full glass-panel p-4 flex flex-col gap-3" data-purpose="ai-plan-output">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs uppercase tracking-widest text-accent-cyan font-bold">
-                Plan Summary
-              </h2>
-              {isThinking && (
-                <div className="flex items-center gap-1.5" id="status-indicator">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-lime opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-lime" />
-                  </span>
-                  <span className="text-[10px] text-accent-lime uppercase tracking-tighter">
-                    Thinking
-                  </span>
-                </div>
-              )}
-            </div>
-            {!hasPlan && !isThinking && (
-              <p className="text-xs text-gray-500">
-                Once a valid change request is entered, the AI plan will appear here.
-              </p>
-            )}
-            {hasPlan && (
-              <ul className="space-y-1.5 text-xs text-gray-300">
-                <li>• Create sandbox for {repoName}.</li>
-                <li>
-                  • Clone <span className="text-accent-cyan">{repoName}:{branchName}</span> and
-                  install dependencies.
-                </li>
-                <li>• Run coding agent and apply edits.</li>
-                <li>• Commit, push branch, and open PR.</li>
-              </ul>
-            )}
-          </aside>
-        </section>
-      </main>
-
-      {/* BottomActionArea */}
-      <footer
-        className="h-20 border-t border-white/10 px-6 flex items-center justify-between glass-panel mx-4 mb-4"
-        data-purpose="execution-bar"
-      >
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-accent-lime shadow-[0_0_5px_#32ff7e]" />
-            <span className="text-[10px] uppercase tracking-tighter">System Ready</span>
-          </div>
-          <div className="h-4 w-px bg-white/10" />
-          <p className="text-[11px] text-white/50 italic">
-            AI core initialized. Waiting for task configuration...
-          </p>
-        </div>
-        <button
-          id="execute-btn"
-          disabled={executeDisabled}
-          onClick={handleExecute}
-          className={
-            'px-10 py-3 rounded-md font-bold uppercase tracking-wider transition-all ' +
-            (executeDisabled
-              ? 'bg-white/5 border border-white/10 text-white/20 cursor-not-allowed'
-              : 'bg-accent-lime/10 border border-accent-lime text-accent-lime shadow-lime-glow hover:bg-accent-lime hover:text-black')
-          }
-        >
-          Execute Plan
-        </button>
-      </footer>
+        )}
+      </div>
     </div>
   )
 }
-

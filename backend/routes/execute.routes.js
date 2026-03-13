@@ -8,7 +8,7 @@ import { ExecutionLog } from '../db/executionLog.model.js'
 const router = Router()
 
 router.post('/', auth, async (req, res) => {
-  const { prompt, repo, owner, defaultBranch } = req.body
+  const { prompt, repo, owner, defaultBranch, chatId: existingChatId } = req.body
   const githubToken = process.env.GITHUB_TOKEN
 
   if (!prompt || !repo || !owner) {
@@ -54,15 +54,25 @@ router.post('/', auth, async (req, res) => {
   }
 
   const onLog = (msg) => emit('log', msg, 'sandbox')
+
   try {
-    chatDoc = await Chat.create({
-      userId: req.user.userId,
-      repo,
-      owner,
-      prompt,
-      messages: [{ role: 'user', content: prompt }],
-      status: 'running',
-    })
+    // Reuse existing planning chat if provided, otherwise create a new one
+    if (existingChatId) {
+      chatDoc = await Chat.findOne({ _id: existingChatId, userId: req.user.userId })
+      if (chatDoc) {
+        await chatDoc.updateOne({ status: 'running' })
+      }
+    }
+    if (!chatDoc) {
+      chatDoc = await Chat.create({
+        userId: req.user.userId,
+        repo,
+        owner,
+        prompt,
+        messages: [{ role: 'user', content: prompt }],
+        status: 'running',
+      })
+    }
     send('chat', { id: chatDoc._id })
   } catch {
     // non-fatal — continue even if DB write fails
@@ -78,6 +88,8 @@ router.post('/', auth, async (req, res) => {
         status: 'running',
       })
       await chatDoc.updateOne({ $push: { executions: executionDoc._id } })
+      // Send execution id immediately so frontend can redirect to /code?id=
+      send('execution', { id: String(executionDoc._id) })
     }
 
     const { committed, prUrl } = await runAgentInSandbox({
