@@ -48,65 +48,36 @@ function parsePlanTags(text: string): { message: string; plan: string } {
 }
 
 function MermaidBlock({ chart }: { chart: string }) {
-  const ref = useRef<HTMLDivElement | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !ref.current || !chart.trim()) return
-
+    if (!ref.current || !chart.trim()) return
     let cancelled = false
-
     ;(async () => {
       try {
-        const mermaidModule = await import('mermaid')
-        const mermaid: any = (mermaidModule as any).default ?? mermaidModule
-
-        mermaid.initialize?.({ startOnLoad: false, theme: 'dark' })
-
-        const id = `mermaid-${Math.random().toString(36).slice(2)}`
-        const result = await mermaid.render?.(id, chart)
-        const svgCode: string | undefined =
-          typeof result === 'string' ? result : result?.svg
-
-        if (!cancelled && ref.current && svgCode) {
-          ref.current.innerHTML = svgCode
-        }
-      } catch {
-        // fail silently; show raw text if needed
-      }
+        const { default: mermaid } = await import('mermaid')
+        mermaid.initialize({ startOnLoad: false, theme: 'dark' })
+        const { svg } = await mermaid.render(`mermaid-${Math.random().toString(36).slice(2)}`, chart)
+        if (!cancelled && ref.current) ref.current.innerHTML = svg
+      } catch {}
     })()
-
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [chart])
 
-  return <div ref={ref} className="mermaid" />
+  return <div ref={ref} />
 }
 
 const markdownComponents = {
-  code({
-    inline,
-    className,
-    children,
-    ...props
-  }: {
+  code({ inline, className, children, ...props }: {
     inline?: boolean
     className?: string
     children?: React.ReactNode
   }) {
-    const match = /language-(\w+)/.exec(className || '')
-    const lang = match?.[1]
-
+    const lang = /language-(\w+)/.exec(className || '')?.[1]
     if (!inline && lang === 'mermaid') {
-      const chart = String(children ?? '').trim()
-      return <MermaidBlock chart={chart} />
+      return <MermaidBlock chart={String(children ?? '').trim()} />
     }
-
-    return (
-      <code className={className} {...props}>
-        {children}
-      </code>
-    )
+    return <code className={className} {...props}>{children}</code>
   },
 }
 
@@ -250,7 +221,6 @@ export default function ChatPage() {
               setResearchStatus(`Reading ${p}`)
               setFilesRead((prev) => {
                 const next = [...prev, p]
-                // Keep the research bubble up-to-date
                 setMessages((msgs) => {
                   const idx = msgs.findIndex((m) => m.role === 'research')
                   if (idx === -1) return msgs
@@ -265,7 +235,6 @@ export default function ChatPage() {
             if (payload.type === 'chunk') {
               accumulated += payload.data.content as string
               const { message, plan: planChunk } = parsePlanTags(accumulated)
-              // Update only the last assistant slot, preserve research bubble
               setMessages((prev) => {
                 const lastIdx = prev.length - 1
                 if (prev[lastIdx]?.role !== 'assistant') return prev
@@ -278,28 +247,25 @@ export default function ChatPage() {
 
             if (payload.type === 'done') {
               const { message, plan: finalPlan } = parsePlanTags(accumulated)
-              setMessages((prev) => {
-                // Mark research bubble as done, update assistant message
-                return prev.map((m, i) => {
+              setMessages((prev) =>
+                prev.map((m, i) => {
                   if (m.role === 'research') return { ...m, researching: false }
                   if (i === prev.length - 1 && m.role === 'assistant')
                     return { ...m, content: message || '✓ Plan generated.' }
                   return m
                 })
-              })
+              )
               if (finalPlan) setPlan(finalPlan)
               setResearchStatus(null)
             }
 
             if (payload.type === 'error') {
               setError((payload.data.message as string) || 'Error generating plan.')
-              setMessages((prev) => {
-                // Mark research done, remove empty assistant slot
-                const withoutAssistant = prev.filter((_, i) => !(i === prev.length - 1 && prev[i].role === 'assistant'))
-                return withoutAssistant.map((m) =>
-                  m.role === 'research' ? { ...m, researching: false } : m,
-                )
-              })
+              setMessages((prev) =>
+                prev
+                  .filter((_, i) => !(i === prev.length - 1 && prev[i].role === 'assistant'))
+                  .map((m) => m.role === 'research' ? { ...m, researching: false } : m)
+              )
               setResearchStatus(null)
             }
           } catch {
@@ -309,13 +275,11 @@ export default function ChatPage() {
       }
     } catch (err: unknown) {
       setError((err as Error)?.message || 'Failed to generate plan.')
-      setMessages((prev) => {
-        // Remove trailing empty assistant slot; mark research done
-        const cleaned = prev
+      setMessages((prev) =>
+        prev
           .filter((m, i) => !(i === prev.length - 1 && m.role === 'assistant' && !m.content))
           .map((m) => m.role === 'research' ? { ...m, researching: false } : m)
-        return cleaned
-      })
+      )
     } finally {
       setIsLoading(false)
       setResearchStatus(null)
@@ -572,38 +536,23 @@ export default function ChatPage() {
                         <p className="whitespace-pre-wrap leading-6 opacity-90">{msg.content}</p>
                       ) : null
                     ) : msg.content ? (
-                      (() => {
-                        const { message: chatPart, plan: planPart } = parsePlanTags(msg.content)
-                        const hasPlanInMsg = planPart.trim().length > 0
-                        if (hasPlanInMsg) {
-                          // Plan is on the right — show only the brief intro sentence(s) here
-                          const intro = chatPart.trim()
-                            ? chatPart.trim().split('\n').slice(0, 2).join('\n').trim()
-                            : ''
-                          return (
-                            <div className="text-sm leading-6 opacity-80">
-                              {intro ? (
-                                <p className="whitespace-pre-wrap">{intro}</p>
-                              ) : null}
-                              <p className="mt-1 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-accent)', opacity: 0.7 }}>
-                                <span>→</span>
-                                <span>Execution plan ready on the right</span>
-                              </p>
-                            </div>
-                          )
-                        }
-                        // No plan yet (still streaming or plain response)
-                        return (
-                          <div className="prose prose-invert prose-sm max-w-none text-sm leading-6 opacity-90 prose-pre:whitespace-pre-wrap prose-pre:break-words">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={markdownComponents}
-                            >
-                              {chatPart.trim() || msg.content}
-                            </ReactMarkdown>
-                          </div>
-                        )
-                      })()
+                      hasPlan && i === messages.length - 1 ? (
+                        <div className="text-sm leading-6 opacity-80">
+                          {msg.content.trim() ? (
+                            <p className="whitespace-pre-wrap">{msg.content.trim().split('\n').slice(0, 2).join('\n')}</p>
+                          ) : null}
+                          <p className="mt-1 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-accent)', opacity: 0.7 }}>
+                            <span>→</span>
+                            <span>Execution plan ready on the right</span>
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="prose prose-invert prose-sm max-w-none text-sm leading-6 opacity-90 prose-pre:whitespace-pre-wrap prose-pre:break-words">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      )
                     ) : streaming ? (
                       <span className="opacity-40 text-xs">Thinking…</span>
                     ) : null}
