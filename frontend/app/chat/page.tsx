@@ -85,9 +85,6 @@ function ChatPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Capture the ID that was in the URL when the page first loaded.
-  // We only hydrate from the server for that initial load — not when we
-  // programmatically push a new id via router.replace during a send.
   const initialChatId = useRef(searchParams.get('id'))
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -102,6 +99,10 @@ function ChatPageInner() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(initialChatId.current)
   const [researchStatus, setResearchStatus] = useState<string | null>(null)
   const [filesRead, setFilesRead] = useState<string[]>([])
+  const [showPlanSheet, setShowPlanSheet] = useState(false)
+  const [planDragY, setPlanDragY] = useState(0)
+  const [isPlanDragging, setIsPlanDragging] = useState(false)
+  const planTouchStartY = useRef(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Load repo from localStorage
@@ -356,6 +357,27 @@ function ChatPageInner() {
     }
   }
 
+  function handlePlanTouchStart(e: React.TouchEvent) {
+    planTouchStartY.current = e.touches[0].clientY
+    setPlanDragY(0)
+    setIsPlanDragging(true)
+  }
+
+  function handlePlanTouchMove(e: React.TouchEvent) {
+    const delta = e.touches[0].clientY - planTouchStartY.current
+    if (delta > 0) setPlanDragY(delta)
+  }
+
+  function handlePlanTouchEnd() {
+    setIsPlanDragging(false)
+    if (planDragY > 80) {
+      setShowPlanSheet(false)
+      setPlanDragY(0)
+    } else {
+      setPlanDragY(0)
+    }
+  }
+
   const repoLabel = owner && repo ? `${owner}/${repo}` : repo || 'No repo selected'
   const hasPlan = plan.trim().length > 0
 
@@ -364,7 +386,7 @@ function ChatPageInner() {
       className="flex flex-col w-full fixed inset-0 overflow-hidden"
       style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
     >
-      {/* Header — fixed at top */}
+      {/* Header */}
       <header
         className="h-14 flex items-center px-4 md:px-6 justify-between shrink-0 z-50"
         style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
@@ -378,7 +400,7 @@ function ChatPageInner() {
           </button>
           <span style={{ color: 'var(--color-border)' }} className="hidden sm:inline">|</span>
           <span
-            className="text-xs sm:text-sm font-mono px-2 py-0.5 rounded truncate"
+            className="text-xs sm:text-sm font-mono px-2 py-0.5 rounded truncate max-w-[140px] sm:max-w-none"
             style={{ background: 'var(--color-bg)', color: 'var(--color-accent)' }}
           >
             {repoLabel}
@@ -388,188 +410,246 @@ function ChatPageInner() {
           )}
         </div>
 
-        {/* Single Execute button — only in the header */}
-        {hasPlan && (
-          <button
-            onClick={handleExecute}
-            disabled={isExecuting || isLoading}
-            className="btn-primary text-xs sm:text-sm"
-          >
-            {isExecuting ? (
-              <>
-                <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
-                Running…
-              </>
-            ) : (
-              '▶ Execute'
-            )}
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Mobile: show plan button in header when plan exists */}
+          {hasPlan && (
+            <button
+              onClick={() => setShowPlanSheet(true)}
+              className="lg:hidden text-xs px-3 py-1.5 rounded-lg font-medium"
+              style={{
+                background: 'rgba(0,229,160,0.08)',
+                border: '1px solid rgba(0,229,160,0.3)',
+                color: 'var(--color-accent)',
+              }}
+            >
+              📋 Plan
+            </button>
+          )}
+          {hasPlan && (
+            <button
+              onClick={handleExecute}
+              disabled={isExecuting || isLoading}
+              className="btn-primary text-xs sm:text-sm"
+            >
+              {isExecuting ? (
+                <>
+                  <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
+                  <span className="hidden sm:inline ml-1">Running…</span>
+                </>
+              ) : (
+                <><span>▶</span><span className="hidden sm:inline ml-1">Execute</span></>
+              )}
+            </button>
+          )}
+        </div>
       </header>
 
-      {/* Body: two-column, full width left-to-right; only chat and plan panels scroll */}
-      <div className="flex flex-1 min-h-0 w-full flex-col lg:flex-row">
-        {/* ─── Left: chat thread ─── */}
+      {/* Mobile: Plan bottom sheet backdrop */}
+      {hasPlan && (
         <div
-          className={`flex flex-col min-h-0 w-full ${hasPlan ? 'lg:w-[42%] lg:min-w-[320px] lg:shrink-0' : ''} ${hasPlan ? 'border-b lg:border-b-0 lg:border-r' : ''}`}
+          aria-hidden="true"
+          className={`fixed inset-0 bg-black/60 z-40 lg:hidden transition-opacity duration-300 ${
+            showPlanSheet ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+          onClick={() => { setShowPlanSheet(false); setPlanDragY(0) }}
+        />
+      )}
+
+      {/* Mobile: Plan bottom sheet */}
+      {hasPlan && (
+        <div
+          className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden flex flex-col rounded-t-2xl max-h-[85vh] ${
+            isPlanDragging ? '' : 'transition-transform duration-300 ease-out'
+          }`}
           style={{
-            borderColor: 'var(--color-border)',
-            transition: 'width 0.3s ease',
+            background: 'var(--color-surface)',
+            borderTop: '1px solid var(--color-border)',
+            transform: showPlanSheet ? `translateY(${planDragY}px)` : 'translateY(100%)',
           }}
         >
-          {/* Messages — only this area scrolls (vertical) */}
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-5 space-y-4">
-            {messages.length === 0 && !isLoading && (
-              <div className="flex flex-col items-center justify-center h-full gap-3 opacity-40 text-sm select-none">
-                <svg
-                  width="40"
-                  height="40"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M8 10h.01M12 10h.01M16 10h.01M21 16c0 1.1-.9 2-2 2H5l-4 4V6c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v10z"
-                  />
-                </svg>
-                <p>Describe a change and the AI will plan it for you.</p>
-                {(!repo || !owner) && (
-                  <p className="text-xs" style={{ color: 'var(--color-accent)' }}>
-                    No repo selected —{' '}
-                    <button
-                      onClick={() => router.push('/repository-explorer')}
-                      className="underline"
-                    >
-                      pick a repository
-                    </button>
-                  </p>
+          {/* Drag handle — touch events only here so scrollable content is unaffected */}
+          <div
+            className="flex flex-col items-center pt-3 pb-2 px-4 shrink-0 touch-none"
+            onTouchStart={handlePlanTouchStart}
+            onTouchMove={(e) => { e.preventDefault(); handlePlanTouchMove(e) }}
+            onTouchEnd={handlePlanTouchEnd}
+          >
+            <div className="w-10 h-1 rounded-full bg-gray-600 mb-3" />
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ background: 'var(--color-accent)', boxShadow: '0 0 6px var(--color-accent)' }}
+                />
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--color-accent)' }}>
+                  Execution Plan
+                </span>
+                {isLoading && (
+                  <span className="animate-spin inline-block w-2.5 h-2.5 border border-current border-t-transparent rounded-full opacity-50" />
                 )}
               </div>
-            )}
+              <button
+                type="button"
+                onPointerUp={() => { setShowPlanSheet(false); setPlanDragY(0) }}
+                className="text-gray-500 hover:text-white transition-colors p-3 -mr-2"
+                aria-label="Close plan"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Plan content — scrolls independently */}
+          <div className="overflow-y-auto flex-1 p-4 pb-8">
+            <div className="prose prose-invert prose-sm max-w-none min-w-0 prose-pre:whitespace-pre-wrap prose-pre:break-words">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                {plan}
+              </ReactMarkdown>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {messages.map((msg, i) => {
-              const isLast = i === messages.length - 1
-              const streaming = isLoading && isLast && msg.role === 'assistant'
-
-              // ── Research bubble ──
-              if (msg.role === 'research') {
-                const files = msg.filesRead ?? []
-                if (files.length === 0 && !msg.researching) return null
-                return (
-                  <div key={i} className="flex justify-start">
-                    <div
-                      className="max-w-full sm:max-w-[92%] rounded-2xl px-4 py-3 text-xs"
-                      style={{
-                        background: 'rgba(99,102,241,0.07)',
-                        border: '1px solid rgba(99,102,241,0.22)',
-                        minWidth: '180px',
-                      }}
-                    >
-                      <div className="flex items-center gap-2 mb-2" style={{ color: 'rgba(165,180,252,0.85)' }}>
-                        {msg.researching ? (
-                          <span
-                            className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full"
-                            style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
-                          />
-                        ) : (
-                          <span style={{ color: '#4ade80' }}>✓</span>
-                        )}
-                        <span className="font-semibold uppercase tracking-wide text-[10px]">
-                          {msg.researching ? 'Researching repo…' : `Read ${files.length} file${files.length !== 1 ? 's' : ''}`}
-                        </span>
-                      </div>
-                      <div className="flex flex-col gap-1" style={{ maxHeight: '160px', overflowY: 'auto' }}>
-                        {files.map((f, fi) => (
-                          <div key={fi} className="flex items-center gap-1.5" style={{ color: 'rgba(200,210,230,0.65)' }}>
-                            <span style={{ color: '#4ade80', flexShrink: 0, fontSize: '10px' }}>✓</span>
-                            <span className="font-mono truncate" style={{ fontSize: '11px' }}>{f}</span>
-                          </div>
-                        ))}
-                        {msg.researching && researchStatus && (
-                          <div className="flex items-center gap-1.5 mt-0.5" style={{ color: 'rgba(165,180,252,0.65)' }}>
-                            <span
-                              className="inline-block w-2 h-2 border border-current border-t-transparent rounded-full"
-                              style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
-                            />
-                            <span className="font-mono truncate" style={{ fontSize: '11px' }}>
-                              {researchStatus.replace('Reading ', '')}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              }
-
-              // ── Regular user / assistant bubbles ──
-              return (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className="max-w-[88%] rounded-2xl px-4 py-3 text-sm"
-                    style={
-                      msg.role === 'user'
-                        ? {
-                            background: 'rgba(0,229,160,0.1)',
-                            border: '1px solid rgba(0,229,160,0.35)',
-                          }
-                        : {
-                            background: 'var(--color-surface)',
-                            border: '1px solid var(--color-border)',
-                          }
-                    }
-                  >
-                    <p className="text-[10px] uppercase tracking-wide mb-1 opacity-40">
-                      {msg.role === 'user' ? 'You' : 'AI Planner'}
+      {/* Body: two-column on desktop, single-column on mobile */}
+      <div className="flex flex-1 min-h-0 w-full flex-col lg:flex-row">
+        {/* ─── Chat column (always full-width on mobile, 42% on desktop when plan exists) ─── */}
+        <div
+          className={`flex flex-col min-h-0 flex-1 w-full ${hasPlan ? 'lg:flex-none lg:w-[42%] lg:min-w-[320px] lg:shrink-0 lg:border-r' : ''}`}
+          style={{ borderColor: 'var(--color-border)' }}
+        >
+          {/* Messages area — scrollable */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+            <div className={`min-h-full flex flex-col ${messages.length === 0 ? 'items-center justify-center' : ''}`}>
+              {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-4 opacity-40 text-sm select-none px-6 text-center">
+                  <svg width="44" height="44" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M21 16c0 1.1-.9 2-2 2H5l-4 4V6c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v10z" />
+                  </svg>
+                  <p>Describe a change and the AI will plan it for you.</p>
+                  {(!repo || !owner) && (
+                    <p className="text-xs" style={{ color: 'var(--color-accent)', opacity: 1 }}>
+                      No repo selected —{' '}
+                      <button onClick={() => router.push('/repository-explorer')} className="underline">
+                        pick a repository
+                      </button>
                     </p>
-                    {msg.role === 'user' ? (
-                      msg.content ? (
-                        <p className="whitespace-pre-wrap leading-6 opacity-90">{msg.content}</p>
-                      ) : null
-                    ) : msg.content ? (
-                      hasPlan && i === messages.length - 1 ? (
-                        <div className="text-sm leading-6 opacity-80">
-                          {msg.content.trim() ? (
-                            <p className="whitespace-pre-wrap">{msg.content.trim().split('\n').slice(0, 2).join('\n')}</p>
-                          ) : null}
-                          <p className="mt-1 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-accent)', opacity: 0.7 }}>
-                            <span>→</span>
-                            <span>Execution plan ready on the right</span>
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="prose prose-invert prose-sm max-w-none text-sm leading-6 opacity-90 prose-pre:whitespace-pre-wrap prose-pre:break-words">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                            {msg.content}
-                          </ReactMarkdown>
+                  )}
+                </div>
+              ) : (
+                <div className="max-w-2xl mx-auto w-full px-3 sm:px-4 py-4 sm:py-5 space-y-4">
+                  {messages.map((msg, i) => {
+                    const isLast = i === messages.length - 1
+                    const streaming = isLoading && isLast && msg.role === 'assistant'
+
+                    if (msg.role === 'research') {
+                      const files = msg.filesRead ?? []
+                      if (files.length === 0 && !msg.researching) return null
+                      return (
+                        <div key={i} className="flex justify-start">
+                          <div
+                            className="max-w-full sm:max-w-[92%] rounded-2xl px-4 py-3 text-xs"
+                            style={{
+                              background: 'rgba(99,102,241,0.07)',
+                              border: '1px solid rgba(99,102,241,0.22)',
+                              minWidth: '180px',
+                            }}
+                          >
+                            <div className="flex items-center gap-2 mb-2" style={{ color: 'rgba(165,180,252,0.85)' }}>
+                              {msg.researching ? (
+                                <span
+                                  className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full"
+                                  style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
+                                />
+                              ) : (
+                                <span style={{ color: '#4ade80' }}>✓</span>
+                              )}
+                              <span className="font-semibold uppercase tracking-wide text-[10px]">
+                                {msg.researching ? 'Researching repo…' : `Read ${files.length} file${files.length !== 1 ? 's' : ''}`}
+                              </span>
+                            </div>
+                            <div className="flex flex-col gap-1" style={{ maxHeight: '140px', overflowY: 'auto' }}>
+                              {files.map((f, fi) => (
+                                <div key={fi} className="flex items-center gap-1.5" style={{ color: 'rgba(200,210,230,0.65)' }}>
+                                  <span style={{ color: '#4ade80', flexShrink: 0, fontSize: '10px' }}>✓</span>
+                                  <span className="font-mono truncate" style={{ fontSize: '11px' }}>{f}</span>
+                                </div>
+                              ))}
+                              {msg.researching && researchStatus && (
+                                <div className="flex items-center gap-1.5 mt-0.5" style={{ color: 'rgba(165,180,252,0.65)' }}>
+                                  <span
+                                    className="inline-block w-2 h-2 border border-current border-t-transparent rounded-full"
+                                    style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
+                                  />
+                                  <span className="font-mono truncate" style={{ fontSize: '11px' }}>
+                                    {researchStatus.replace('Reading ', '')}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       )
-                    ) : streaming ? (
-                      <span className="opacity-40 text-xs">Thinking…</span>
-                    ) : null}
-                    {streaming && (
-                      <span
-                        className="inline-block w-1.5 h-4 ml-0.5 rounded-sm animate-pulse"
-                        style={{ background: 'var(--color-accent)', verticalAlign: 'text-bottom' }}
-                      />
-                    )}
-                  </div>
+                    }
+
+                    return (
+                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                          className="max-w-[88%] rounded-2xl px-4 py-3 text-sm"
+                          style={
+                            msg.role === 'user'
+                              ? { background: 'rgba(0,229,160,0.1)', border: '1px solid rgba(0,229,160,0.35)' }
+                              : { background: 'var(--color-surface)', border: '1px solid var(--color-border)' }
+                          }
+                        >
+                          <p className="text-[10px] uppercase tracking-wide mb-1 opacity-40">
+                            {msg.role === 'user' ? 'You' : 'AI Planner'}
+                          </p>
+                          {msg.role === 'user' ? (
+                            msg.content ? <p className="whitespace-pre-wrap leading-6 opacity-90">{msg.content}</p> : null
+                          ) : msg.content ? (
+                            hasPlan && i === messages.length - 1 ? (
+                              <div className="text-sm leading-6 opacity-80">
+                                {msg.content.trim() ? (
+                                  <p className="whitespace-pre-wrap">{msg.content.trim().split('\n').slice(0, 2).join('\n')}</p>
+                                ) : null}
+                                <button
+                                  className="mt-2 text-xs flex items-center gap-1.5 lg:pointer-events-none"
+                                  style={{ color: 'var(--color-accent)', opacity: 0.8 }}
+                                  onClick={() => setShowPlanSheet(true)}
+                                >
+                                  <span>→</span>
+                                  <span className="lg:hidden">Tap to view execution plan</span>
+                                  <span className="hidden lg:inline">Execution plan ready on the right</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="prose prose-invert prose-sm max-w-none text-sm leading-6 opacity-90 prose-pre:whitespace-pre-wrap prose-pre:break-words">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                  {msg.content}
+                                </ReactMarkdown>
+                              </div>
+                            )
+                          ) : streaming ? (
+                            <span className="opacity-40 text-xs">Thinking…</span>
+                          ) : null}
+                          {streaming && (
+                            <span
+                              className="inline-block w-1.5 h-4 ml-0.5 rounded-sm animate-pulse"
+                              style={{ background: 'var(--color-accent)', verticalAlign: 'text-bottom' }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div ref={messagesEndRef} />
                 </div>
-              )
-            })}
-
-            <div ref={messagesEndRef} />
-          </div>
+              )}
+            </div>
           </div>
 
-          {/* Input — fixed at bottom of chat panel; stays visible when messages scroll */}
+          {/* Input — pinned at bottom */}
           <div
             className="shrink-0 py-3 px-3 sm:px-4"
             style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
@@ -594,11 +674,7 @@ function ChatPageInner() {
                 <textarea
                   className="flex-1 bg-transparent resize-none text-sm outline-none"
                   style={{ height: '56px', lineHeight: '1.5', paddingTop: '6px', color: 'inherit' }}
-                  placeholder={
-                    hasPlan
-                      ? 'Refine the plan or ask for changes…'
-                      : 'Describe a change to make to this repo…'
-                  }
+                  placeholder={hasPlan ? 'Refine the plan or ask for changes…' : 'Describe a change to make to this repo…'}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -612,11 +688,7 @@ function ChatPageInner() {
                 >
                   {isLoading ? (
                     <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
-                  ) : hasPlan ? (
-                    'Refine'
-                  ) : (
-                    'Plan'
-                  )}
+                  ) : hasPlan ? 'Refine' : 'Plan'}
                 </button>
               </div>
               <p className="text-[10px] opacity-20 mt-1 text-center">Enter to send · Shift+Enter for newline</p>
@@ -624,50 +696,30 @@ function ChatPageInner() {
           </div>
         </div>
 
-        {/* ─── Right: plan panel (only when plan exists); only this area scrolls (vertical + horizontal) ─── */}
+        {/* ─── Desktop only: Right plan panel ─── */}
         {hasPlan && (
-          <div className="flex flex-col min-h-0 min-w-0 flex-1 border-t lg:border-t-0" style={{ borderColor: 'var(--color-border)' }}>
-            {/* Panel header — fixed, no scroll */}
+          <div className="hidden lg:flex flex-col min-h-0 min-w-0 flex-1" style={{ borderColor: 'var(--color-border)' }}>
             <div
-              className="flex items-center gap-2 px-4 sm:px-5 py-3 shrink-0"
-              style={{
-                borderBottom: '1px solid var(--color-border)',
-                background: 'var(--color-surface)',
-              }}
+              className="flex items-center gap-2 px-5 py-3 shrink-0"
+              style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
             >
               <span
                 className="w-2 h-2 rounded-full shrink-0"
-                style={{
-                  background: 'var(--color-accent)',
-                  boxShadow: '0 0 6px var(--color-accent)',
-                }}
+                style={{ background: 'var(--color-accent)', boxShadow: '0 0 6px var(--color-accent)' }}
               />
-              <h2
-                className="text-xs font-bold uppercase tracking-widest"
-                style={{ color: 'var(--color-accent)' }}
-              >
+              <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--color-accent)' }}>
                 Execution Plan
               </h2>
               {isLoading && (
-                <span
-                  className="ml-auto text-[10px] opacity-50 flex items-center gap-1"
-                >
+                <span className="ml-auto text-[10px] opacity-50 flex items-center gap-1">
                   <span className="animate-spin inline-block w-2.5 h-2.5 border border-current border-t-transparent rounded-full" />
                   Streaming…
                 </span>
               )}
             </div>
-
-            {/* Plan content — scrolls vertically only */}
-            <div
-              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6"
-              style={{ background: 'var(--color-bg)' }}
-            >
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6" style={{ background: 'var(--color-bg)' }}>
               <div className="prose prose-invert prose-sm max-w-none min-w-0 prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:overflow-x-auto">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={markdownComponents}
-                >
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                   {plan}
                 </ReactMarkdown>
               </div>

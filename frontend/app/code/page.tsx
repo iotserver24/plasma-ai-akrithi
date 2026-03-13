@@ -214,11 +214,30 @@ function CodePageInner() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [fetchError, setFetchError] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
+  const [showDetails, setShowDetails] = useState(false)
+  const [detailsDragY, setDetailsDragY] = useState(0)
+  const [isDetailsDragging, setIsDetailsDragging] = useState(false)
+  const detailsTouchStartY = useRef(0)
 
   const seenIdsRef = useRef(new Set<string>())
   const logOffsetRef = useRef(0)
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logsScrollRef = useRef<HTMLDivElement>(null)
+
+  function handleDetailsTouchStart(e: React.TouchEvent) {
+    detailsTouchStartY.current = e.touches[0].clientY
+    setDetailsDragY(0)
+    setIsDetailsDragging(true)
+  }
+  function handleDetailsTouchMove(e: React.TouchEvent) {
+    const delta = e.touches[0].clientY - detailsTouchStartY.current
+    if (delta > 0) setDetailsDragY(delta)
+  }
+  function handleDetailsTouchEnd() {
+    setIsDetailsDragging(false)
+    if (detailsDragY > 80) { setShowDetails(false); setDetailsDragY(0) }
+    else setDetailsDragY(0)
+  }
 
   // Auto-scroll
   useEffect(() => {
@@ -310,12 +329,98 @@ function CodePageInner() {
 
   const groups = groupLogs(logs)
 
+  // Shared metadata panel content used in both the desktop sidebar and mobile bottom sheet
+  const MetaContent = (
+    <>
+      {execution?.prUrl && (
+        <div className="m-4 p-4 rounded-xl space-y-3 shrink-0"
+          style={{ background: 'rgba(0,229,160,0.07)', border: '1px solid rgba(0,229,160,0.35)' }}>
+          <div className="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+              style={{ color: 'var(--color-accent)', flexShrink: 0 }}>
+              <circle cx="18" cy="18" r="3" />
+              <circle cx="6" cy="6" r="3" />
+              <path d="M6 9v12" strokeLinecap="round" />
+              <path d="M18 6V3m0 0L15 6m3-3l3 3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--color-accent)' }}>
+              Pull Request
+            </span>
+          </div>
+          <a href={execution.prUrl} target="_blank" rel="noreferrer"
+            className="block text-xs break-all leading-5 hover:opacity-80"
+            style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>
+            {execution.prUrl}
+          </a>
+          <a href={execution.prUrl} target="_blank" rel="noreferrer"
+            className="btn-primary text-xs w-full text-center block">
+            Open PR →
+          </a>
+        </div>
+      )}
+      <div className="p-4 space-y-4">
+        <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-40">Execution</h3>
+        {execution ? (
+          <div className="space-y-3">
+            {[
+              { label: 'Repository', value: `${execution.owner}/${execution.repo}`, accent: true },
+              { label: 'Prompt', value: execution.prompt },
+              { label: 'Status', value: statusLabel, color: statusColor },
+              { label: 'Started', value: new Date(execution.startedAt).toLocaleString(), mono: true },
+              ...(execution.endedAt ? [{ label: 'Ended', value: new Date(execution.endedAt).toLocaleString(), mono: true }] : []),
+              { label: 'Duration', value: elapsed(execution.startedAt, execution.endedAt), mono: true },
+            ].map(({ label, value, accent, color, mono }) => (
+              <div key={label}>
+                <p className="text-[10px] uppercase opacity-40 mb-0.5">{label}</p>
+                <p className={`text-xs leading-5 break-words ${mono ? 'font-mono' : ''}`}
+                  style={{ color: color || (accent ? 'var(--color-accent)' : undefined), opacity: color || accent ? 1 : 0.8 }}>
+                  {value}
+                </p>
+              </div>
+            ))}
+            {execution.error && (
+              <div>
+                <p className="text-[10px] uppercase mb-0.5" style={{ color: '#f87171' }}>Error</p>
+                <p className="text-xs break-words leading-5" style={{ color: '#f87171' }}>{execution.error}</p>
+              </div>
+            )}
+            {execution.warnings.length > 0 && (
+              <div>
+                <p className="text-[10px] uppercase opacity-40 mb-1">Warnings</p>
+                <ul className="space-y-1">
+                  {execution.warnings.map((w, i) => (
+                    <li key={i} className="text-xs leading-5" style={{ color: '#facc15' }}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="pt-2">
+              <button
+                onClick={() => execution.chatId ? router.push(`/chat?id=${execution.chatId}`) : router.push('/chat')}
+                className="w-full text-xs py-2 rounded-lg transition-opacity hover:opacity-80"
+                style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
+                ← Back to plan
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {[70, 50, 80, 55].map((w, i) => (
+              <div key={i} className="h-3 rounded animate-pulse"
+                style={{ background: 'var(--color-border)', width: `${w}%` }} />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+
   return (
-    <div className="flex flex-col"
-      style={{ height: '100vh', background: 'var(--color-bg)', color: 'var(--color-text)', overflow: 'hidden' }}>
+    <div className="flex flex-col fixed inset-0 overflow-hidden"
+      style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}>
 
       {/* ── Header ── */}
-      <header className="shrink-0 flex items-center px-4 sm:px-6 gap-3 sm:gap-4 py-3 sm:py-0"
+      <header className="shrink-0 h-14 flex items-center px-4 sm:px-6 gap-3 sm:gap-4"
         style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
         <button
           onClick={() => execution?.chatId ? router.push(`/chat?id=${execution.chatId}`) : router.push('/dashboard')}
@@ -324,7 +429,7 @@ function CodePageInner() {
         </button>
         <span style={{ color: 'var(--color-border)' }} className="hidden sm:inline">|</span>
         {execution && (
-          <span className="text-xs sm:text-sm font-mono px-2 py-0.5 rounded truncate"
+          <span className="text-xs sm:text-sm font-mono px-2 py-0.5 rounded truncate max-w-[140px] sm:max-w-none"
             style={{ background: 'var(--color-bg)', color: 'var(--color-accent)' }}>
             {execution.owner}/{execution.repo}
           </span>
@@ -339,14 +444,72 @@ function CodePageInner() {
               )}
             </>
           )}
+          {/* Mobile: details button */}
+          <button
+            onClick={() => setShowDetails(true)}
+            className="lg:hidden text-xs px-3 py-1.5 rounded-lg font-medium"
+            style={{
+              background: 'rgba(148,163,184,0.08)',
+              border: '1px solid rgba(148,163,184,0.2)',
+              color: '#94a3b8',
+            }}>
+            ⓘ Info
+          </button>
         </div>
       </header>
+
+      {/* Mobile: details backdrop */}
+      <div
+        aria-hidden="true"
+        className={`fixed inset-0 bg-black/60 z-40 lg:hidden transition-opacity duration-300 ${
+          showDetails ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => { setShowDetails(false); setDetailsDragY(0) }}
+      />
+
+      {/* Mobile: details bottom sheet */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden flex flex-col rounded-t-2xl max-h-[85vh] ${
+          isDetailsDragging ? '' : 'transition-transform duration-300 ease-out'
+        }`}
+        style={{
+          background: 'var(--color-surface)',
+          borderTop: '1px solid var(--color-border)',
+          transform: showDetails ? `translateY(${detailsDragY}px)` : 'translateY(100%)',
+        }}
+      >
+        {/* Drag handle */}
+        <div
+          className="flex flex-col items-center pt-3 pb-2 px-4 shrink-0 touch-none"
+          onTouchStart={handleDetailsTouchStart}
+          onTouchMove={(e) => { e.preventDefault(); handleDetailsTouchMove(e) }}
+          onTouchEnd={handleDetailsTouchEnd}
+        >
+          <div className="w-10 h-1 rounded-full bg-gray-600 mb-3" />
+          <div className="flex items-center justify-between w-full">
+            <span className="text-xs font-bold uppercase tracking-widest opacity-60">Execution Details</span>
+            <button
+              type="button"
+              onPointerUp={() => { setShowDetails(false); setDetailsDragY(0) }}
+              className="text-gray-500 hover:text-white transition-colors p-3 -mr-2"
+              aria-label="Close"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div className="overflow-y-auto flex-1 pb-8">
+          {MetaContent}
+        </div>
+      </div>
 
       {/* ── Body ── */}
       <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
 
-        {/* ── Left: log terminal ── */}
-        <div className="flex flex-col flex-1 min-w-0">
+        {/* ── Log terminal (full height on mobile) ── */}
+        <div className="flex flex-col flex-1 min-w-0 min-h-0">
           {/* Toolbar */}
           <div className="shrink-0 flex items-center justify-between px-4 py-2"
             style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
@@ -375,7 +538,7 @@ function CodePageInner() {
                   border: `1px solid ${autoScroll ? 'rgba(0,229,160,0.4)' : 'var(--color-border)'}`,
                   color: autoScroll ? 'var(--color-accent)' : 'var(--color-muted)',
                 }}>
-                ↓ Auto-scroll {autoScroll ? 'ON' : 'OFF'}
+                ↓ {autoScroll ? 'ON' : 'OFF'}
               </button>
             </div>
           </div>
@@ -384,7 +547,7 @@ function CodePageInner() {
           <div
             ref={logsScrollRef}
             onScroll={handleLogsScroll}
-            className="flex-1 overflow-y-auto overflow-x-auto"
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-auto"
             style={{ background: '#0a0c10', fontFamily: 'var(--font-geist-mono), "Cascadia Code", "Fira Code", monospace' }}>
 
             {fetchError && (
@@ -402,14 +565,10 @@ function CodePageInner() {
 
                 return (
                   <div key={group.id}
-                    className="group/block relative px-4 py-1.5 mb-0.5"
-                    style={{ borderLeft: `2px solid ${borderColor}`, marginLeft: '0' }}>
-
-                    {/* Source + timestamp badge */}
+                    className="px-4 py-1.5 mb-0.5"
+                    style={{ borderLeft: `2px solid ${borderColor}` }}>
                     <div className="flex items-center gap-2 mb-1 select-none">
-                      <span className="text-[10px] font-mono opacity-25">
-                        {formatTs(group.ts)}
-                      </span>
+                      <span className="text-[10px] font-mono opacity-25">{formatTs(group.ts)}</span>
                       {label && (
                         <span className="text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded"
                           style={{
@@ -433,19 +592,15 @@ function CodePageInner() {
                         </span>
                       )}
                     </div>
-
-                    {/* Log lines */}
                     <div className="space-y-0.5 pl-1">
                       {group.lines.map((log) => {
                         const raw = isXibecode
                           ? log.message.replace(/^\[XibeCode\]\s?/, '')
                           : log.message.replace(/^\[stderr\]\s?/, '')
-
                         const hl = log.type === 'error' ? 'error'
                           : log.type === 'warning' ? 'warning'
                           : classifyLine(raw)
-
-                        const style = hl ? HIGHLIGHT_STYLES[hl] : null
+                        const hlStyle = hl ? HIGHLIGHT_STYLES[hl] : null
                         const html = renderAnsi(raw)
                         const isDim = hl === 'dim'
 
@@ -458,27 +613,22 @@ function CodePageInner() {
                             />
                           )
                         }
-
-                        if (style) {
+                        if (hlStyle) {
                           return (
                             <div key={log._id}
                               className="flex items-start gap-2 rounded-md px-2.5 py-1.5 my-1"
-                              style={{
-                                background: style.bg,
-                                border: `1px solid ${style.border}`,
-                              }}>
-                              {style.icon && (
-                                <span className="shrink-0 text-sm leading-5 select-none">{style.icon}</span>
+                              style={{ background: hlStyle.bg, border: `1px solid ${hlStyle.border}` }}>
+                              {hlStyle.icon && (
+                                <span className="shrink-0 text-sm leading-5 select-none">{hlStyle.icon}</span>
                               )}
                               <span
-                                className={`text-xs leading-5 whitespace-pre-wrap break-all flex-1 ${style.bold ? 'font-semibold' : ''}`}
-                                style={{ color: style.color }}
+                                className={`text-xs leading-5 whitespace-pre-wrap break-all flex-1 ${hlStyle.bold ? 'font-semibold' : ''}`}
+                                style={{ color: hlStyle.color }}
                                 dangerouslySetInnerHTML={{ __html: html }}
                               />
                             </div>
                           )
                         }
-
                         return (
                           <div key={log._id}
                             className="text-xs leading-5 whitespace-pre-wrap break-all"
@@ -502,99 +652,12 @@ function CodePageInner() {
           </div>
         </div>
 
-        {/* ── Right: fixed metadata panel ── */}
+        {/* ── Desktop: right metadata panel ── */}
         <div
-          className="shrink-0 flex flex-col overflow-y-auto w-full lg:w-72 border-t lg:border-t-0 lg:border-l"
+          className="hidden lg:flex shrink-0 flex-col overflow-y-auto w-72 border-l"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
         >
-
-          {/* PR card */}
-          {execution?.prUrl && (
-            <div className="m-4 p-4 rounded-xl space-y-3 shrink-0"
-              style={{ background: 'rgba(0,229,160,0.07)', border: '1px solid rgba(0,229,160,0.35)' }}>
-              <div className="flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
-                  style={{ color: 'var(--color-accent)', flexShrink: 0 }}>
-                  <circle cx="18" cy="18" r="3" />
-                  <circle cx="6" cy="6" r="3" />
-                  <path d="M6 9v12" strokeLinecap="round" />
-                  <path d="M18 6V3m0 0L15 6m3-3l3 3" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--color-accent)' }}>
-                  Pull Request
-                </span>
-              </div>
-              <a href={execution.prUrl} target="_blank" rel="noreferrer"
-                className="block text-xs break-all leading-5 hover:opacity-80"
-                style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>
-                {execution.prUrl}
-              </a>
-              <a href={execution.prUrl} target="_blank" rel="noreferrer"
-                className="btn-primary text-xs w-full text-center block">
-                Open PR →
-              </a>
-            </div>
-          )}
-
-          {/* Metadata rows */}
-          <div className="p-4 space-y-4">
-            <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-40">Execution</h3>
-
-            {execution ? (
-              <div className="space-y-3">
-                {[
-                  { label: 'Repository', value: `${execution.owner}/${execution.repo}`, accent: true },
-                  { label: 'Prompt', value: execution.prompt },
-                  { label: 'Status', value: statusLabel, color: statusColor },
-                  { label: 'Started', value: new Date(execution.startedAt).toLocaleString(), mono: true },
-                  ...(execution.endedAt ? [{ label: 'Ended', value: new Date(execution.endedAt).toLocaleString(), mono: true }] : []),
-                  { label: 'Duration', value: elapsed(execution.startedAt, execution.endedAt), mono: true },
-                ].map(({ label, value, accent, color, mono }) => (
-                  <div key={label}>
-                    <p className="text-[10px] uppercase opacity-40 mb-0.5">{label}</p>
-                    <p className={`text-xs leading-5 wrap-break-word ${mono ? 'font-mono' : ''}`}
-                      style={{ color: color || (accent ? 'var(--color-accent)' : undefined), opacity: color || accent ? 1 : 0.8 }}>
-                      {value}
-                    </p>
-                  </div>
-                ))}
-
-                {execution.error && (
-                  <div>
-                    <p className="text-[10px] uppercase mb-0.5" style={{ color: '#f87171' }}>Error</p>
-                    <p className="text-xs wrap-break-word leading-5" style={{ color: '#f87171' }}>{execution.error}</p>
-                  </div>
-                )}
-
-                {execution.warnings.length > 0 && (
-                  <div>
-                    <p className="text-[10px] uppercase opacity-40 mb-1">Warnings</p>
-                    <ul className="space-y-1">
-                      {execution.warnings.map((w, i) => (
-                        <li key={i} className="text-xs leading-5" style={{ color: '#facc15' }}>{w}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="pt-2">
-                  <button
-                    onClick={() => execution.chatId ? router.push(`/chat?id=${execution.chatId}`) : router.push('/chat')}
-                    className="w-full text-xs py-2 rounded-lg transition-opacity hover:opacity-80"
-                    style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)' }}>
-                    ← Back to plan
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {[70, 50, 80, 55].map((w, i) => (
-                  <div key={i} className="h-3 rounded animate-pulse"
-                    style={{ background: 'var(--color-border)', width: `${w}%` }} />
-                ))}
-              </div>
-            )}
-          </div>
+          {MetaContent}
         </div>
       </div>
     </div>

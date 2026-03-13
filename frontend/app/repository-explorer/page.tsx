@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { api, getToken } from '@/lib/api'
 
@@ -38,6 +38,10 @@ export default function RepositoryExplorerPage() {
   const [statsLoading, setStatsLoading] = useState(false)
   const [statsError, setStatsError] = useState('')
   const [statsRepoFullName, setStatsRepoFullName] = useState<string | null>(null)
+  const [showPanel, setShowPanel] = useState(false)
+  const [dragY, setDragY] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const touchStartY = useRef(0)
 
   useEffect(() => {
     if (!getToken()) {
@@ -83,6 +87,32 @@ export default function RepositoryExplorerPage() {
     void fetchStats(repo)
     if (typeof window !== 'undefined') {
       localStorage.setItem('selectedRepo', JSON.stringify(repo))
+    }
+    setShowPanel(true)
+  }
+
+  function closePanel() {
+    setShowPanel(false)
+    setDragY(0)
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartY.current = e.touches[0].clientY
+    setDragY(0)
+    setIsDragging(true)
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    const delta = e.touches[0].clientY - touchStartY.current
+    if (delta > 0) setDragY(delta)
+  }
+
+  function handleTouchEnd() {
+    setIsDragging(false)
+    if (dragY > 80) {
+      closePanel()
+    } else {
+      setDragY(0)
     }
   }
 
@@ -202,8 +232,61 @@ export default function RepositoryExplorerPage() {
         </div>
       </nav>
 
+      {/* Mobile backdrop overlay */}
+      <div
+        aria-hidden="true"
+        className={`fixed inset-0 bg-black/60 z-40 lg:hidden transition-opacity duration-300 ${
+          showPanel ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={closePanel}
+      />
+
+      {/* Mobile bottom sheet */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-fixai-panel rounded-t-2xl max-h-[82vh] flex flex-col ${
+          isDragging ? '' : 'transition-transform duration-300 ease-out'
+        }`}
+        style={{ transform: showPanel ? `translateY(${dragY}px)` : 'translateY(100%)' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        data-purpose="mobile-bottom-sheet"
+      >
+        {/* Drag handle bar */}
+        <div className="flex flex-col items-center pt-3 pb-2 px-4 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-gray-600 mb-3" />
+          <div className="flex items-center justify-between w-full">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              {selectedRepo?.name ?? 'Repository Details'}
+            </span>
+            <button
+              type="button"
+              onClick={closePanel}
+              className="text-gray-500 hover:text-white transition-colors p-1 -mr-1"
+              aria-label="Close panel"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex flex-col gap-6 p-4 pb-8">
+          <SidebarContent
+            selectedRepo={selectedRepo}
+            statsLoading={statsLoading}
+            statsError={statsError}
+            hasActiveStats={hasActiveStats}
+            stats={stats}
+            onUse={handleUseSelectedRepo}
+          />
+        </div>
+      </div>
+
       <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
-        {/* Main Content Area (full-width list of repositories) */}
+        {/* Main Content Area */}
         <main
           className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6"
           data-purpose="main-content"
@@ -232,7 +315,7 @@ export default function RepositoryExplorerPage() {
                 >
                   <div>
                     <div className="flex justify-between items-start mb-4">
-                    <h3 className="font-mono text-base sm:text-lg text-white font-semibold truncate">
+                      <h3 className="font-mono text-base sm:text-lg text-white font-semibold truncate">
                         {repo.name}
                       </h3>
                       <span
@@ -268,96 +351,127 @@ export default function RepositoryExplorerPage() {
           </div>
         </main>
 
-        {/* Right Sidebar */}
+        {/* Desktop Right Sidebar */}
         <aside
-          className="w-full lg:w-80 bg-fixai-panel border-t lg:border-t-0 lg:border-l border-fixai-border p-4 sm:p-6 flex flex-col gap-6 overflow-y-auto h-[30vh] sm:h-auto"
+          className="hidden lg:flex flex-col w-80 bg-fixai-panel border-l border-fixai-border p-6 gap-6 overflow-y-auto"
           data-purpose="right-sidebar"
         >
-          <div className="order-2 lg:order-0">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 sm:mb-6">
-              Repository Stats
-            </h2>
-            <div className="space-y-6">
-              <div className="flex flex-col gap-1" data-purpose="stat-item">
-                <span className="text-xs text-gray-500">Selected Repository</span>
-                <span className="text-sm font-mono text-fixai-cyan">
-                  {selectedRepo ? selectedRepo.full_name : 'None selected'}
-                </span>
-              </div>
-              {statsLoading && (
-                <p className="text-[10px] text-gray-500">Loading repository stats…</p>
-              )}
-              {statsError && !statsLoading && (
-                <p className="text-[10px] text-red-400">{statsError}</p>
-              )}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-fixai-bg/50 p-3 rounded border border-fixai-border">
-                  <p className="text-[10px] text-gray-500 uppercase">Active Issues</p>
-                  <p className="text-xl font-mono text-white">
-                    {hasActiveStats ? stats.open_issues : '--'}
-                  </p>
-                </div>
-                <div className="bg-fixai-bg/50 p-3 rounded border border-fixai-border">
-                  <p className="text-[10px] text-gray-500 uppercase">Contributors</p>
-                  <p className="text-xl font-mono text-white">
-                    {hasActiveStats ? stats.contributors.length : '--'}
-                  </p>
-                </div>
-                <div className="bg-fixai-bg/50 p-3 rounded border border-fixai-border">
-                  <p className="text-[10px] text-gray-500 uppercase">Files</p>
-                  <p className="text-xl font-mono text-white">
-                    {hasActiveStats ? stats.approximate_files : '--'}
-                  </p>
-                </div>
-                <div className="bg-fixai-bg/50 p-3 rounded border border-fixai-border">
-                  <p className="text-[10px] text-gray-500 uppercase">Pull Requests</p>
-                  <p className="text-xl font-mono text-white">
-                    {hasActiveStats ? stats.pull_requests_open : '--'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-fixai-border pt-6 order-1 lg:order-0">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
-              Active Contributors
-            </h2>
-            <div className="space-y-3">
-              {statsLoading && <p className="text-[10px] text-gray-500">Loading contributors…</p>}
-              {!statsLoading && hasActiveStats && stats.contributors.length === 0 && (
-                <p className="text-[10px] text-gray-500">No contributors found.</p>
-              )}
-              {!statsLoading &&
-                hasActiveStats &&
-                stats.contributors.map((c) => (
-                  <div key={c.login} className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded bg-gray-700 flex items-center justify-center text-[10px] font-mono overflow-hidden">
-                      <span>{c.login.slice(0, 2).toUpperCase()}</span>
-                    </div>
-                    <span className="text-sm text-gray-300">{c.login}</span>
-                    <span className="ml-auto text-[10px] text-fixai-cyan">
-                      {c.contributions} commits
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          {/* Select repo section at bottom of stats */}
-          <div className="mt-auto space-y-4">
-            <button
-              type="button"
-              onClick={handleUseSelectedRepo}
-              disabled={!selectedRepo}
-              className="w-full py-2 rounded-md border border-fixai-cyan/30 text-xs font-bold uppercase tracking-widest text-fixai-cyan disabled:opacity-40 disabled:cursor-not-allowed bg-fixai-cyan/5 hover:bg-fixai-cyan/10 transition-colors"
-            >
-              {selectedRepo ? 'Use this repository' : 'Select a repository first'}
-            </button>
-          </div>
+          <SidebarContent
+            selectedRepo={selectedRepo}
+            statsLoading={statsLoading}
+            statsError={statsError}
+            hasActiveStats={hasActiveStats}
+            stats={stats}
+            onUse={handleUseSelectedRepo}
+          />
         </aside>
       </div>
     </div>
+  )
+}
+
+interface SidebarContentProps {
+  selectedRepo: { full_name: string } | null
+  statsLoading: boolean
+  statsError: string
+  hasActiveStats: boolean
+  stats: RepoStats | null
+  onUse: () => void
+}
+
+function SidebarContent({
+  selectedRepo,
+  statsLoading,
+  statsError,
+  hasActiveStats,
+  stats,
+  onUse,
+}: SidebarContentProps) {
+  return (
+    <>
+      <div>
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 sm:mb-6">
+          Repository Stats
+        </h2>
+        <div className="space-y-6">
+          <div className="flex flex-col gap-1" data-purpose="stat-item">
+            <span className="text-xs text-gray-500">Selected Repository</span>
+            <span className="text-sm font-mono text-fixai-cyan">
+              {selectedRepo ? selectedRepo.full_name : 'None selected'}
+            </span>
+          </div>
+          {statsLoading && (
+            <p className="text-[10px] text-gray-500">Loading repository stats…</p>
+          )}
+          {statsError && !statsLoading && (
+            <p className="text-[10px] text-red-400">{statsError}</p>
+          )}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-fixai-bg/50 p-3 rounded border border-fixai-border">
+              <p className="text-[10px] text-gray-500 uppercase">Active Issues</p>
+              <p className="text-xl font-mono text-white">
+                {hasActiveStats && stats ? stats.open_issues : '--'}
+              </p>
+            </div>
+            <div className="bg-fixai-bg/50 p-3 rounded border border-fixai-border">
+              <p className="text-[10px] text-gray-500 uppercase">Contributors</p>
+              <p className="text-xl font-mono text-white">
+                {hasActiveStats && stats ? stats.contributors.length : '--'}
+              </p>
+            </div>
+            <div className="bg-fixai-bg/50 p-3 rounded border border-fixai-border">
+              <p className="text-[10px] text-gray-500 uppercase">Files</p>
+              <p className="text-xl font-mono text-white">
+                {hasActiveStats && stats ? stats.approximate_files : '--'}
+              </p>
+            </div>
+            <div className="bg-fixai-bg/50 p-3 rounded border border-fixai-border">
+              <p className="text-[10px] text-gray-500 uppercase">Pull Requests</p>
+              <p className="text-xl font-mono text-white">
+                {hasActiveStats && stats ? stats.pull_requests_open : '--'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-fixai-border pt-6">
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
+          Active Contributors
+        </h2>
+        <div className="space-y-3">
+          {statsLoading && <p className="text-[10px] text-gray-500">Loading contributors…</p>}
+          {!statsLoading && hasActiveStats && stats && stats.contributors.length === 0 && (
+            <p className="text-[10px] text-gray-500">No contributors found.</p>
+          )}
+          {!statsLoading &&
+            hasActiveStats &&
+            stats &&
+            stats.contributors.map((c) => (
+              <div key={c.login} className="flex items-center gap-3">
+                <div className="w-6 h-6 rounded bg-gray-700 flex items-center justify-center text-[10px] font-mono overflow-hidden">
+                  <span>{c.login.slice(0, 2).toUpperCase()}</span>
+                </div>
+                <span className="text-sm text-gray-300">{c.login}</span>
+                <span className="ml-auto text-[10px] text-fixai-cyan">
+                  {c.contributions} commits
+                </span>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      <div className="mt-auto space-y-4">
+        <button
+          type="button"
+          onClick={onUse}
+          disabled={!selectedRepo}
+          className="w-full py-2 rounded-md border border-fixai-cyan/30 text-xs font-bold uppercase tracking-widest text-fixai-cyan disabled:opacity-40 disabled:cursor-not-allowed bg-fixai-cyan/5 hover:bg-fixai-cyan/10 transition-colors"
+        >
+          {selectedRepo ? 'Use this repository' : 'Select a repository first'}
+        </button>
+      </div>
+    </>
   )
 }
 
