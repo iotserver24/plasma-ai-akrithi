@@ -404,8 +404,20 @@ export default function ChatPage() {
                     <p className="text-[10px] uppercase tracking-wide mb-1 opacity-40">
                       {msg.role === 'user' ? 'You' : 'AI Planner'}
                     </p>
-                    {msg.content ? (
-                      <p className="whitespace-pre-wrap leading-6 opacity-90">{msg.content}</p>
+                    {msg.role === 'user' ? (
+                      msg.content ? (
+                        <p className="whitespace-pre-wrap leading-6 opacity-90">{msg.content}</p>
+                      ) : null
+                    ) : msg.content ? (
+                      (() => {
+                        const { message: chatPart } = parsePlanTags(msg.content)
+                        const toShow = chatPart.trim() || 'Plan generated. See execution plan on the right.'
+                        return (
+                          <div className="prose prose-invert prose-sm max-w-none text-sm leading-6 opacity-90">
+                            <ReactMarkdown>{toShow}</ReactMarkdown>
+                          </div>
+                        )
+                      })()
                     ) : streaming ? (
                       <span className="opacity-40 text-xs">Thinking…</span>
                     ) : null}

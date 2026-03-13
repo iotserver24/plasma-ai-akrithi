@@ -8,7 +8,6 @@ const router = Router()
 router.get('/:id', auth, async (req, res) => {
   try {
     const chat = await Chat.findOne({ _id: req.params.id, userId: req.user.userId })
-      .select('-messages')
       .lean()
     if (!chat) {
       return res.status(404).json({ error: 'Chat not found' })
