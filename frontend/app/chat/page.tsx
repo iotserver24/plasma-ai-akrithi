@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -81,7 +81,7 @@ const markdownComponents = {
   },
 }
 
-export default function ChatPage() {
+function ChatPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -678,5 +678,24 @@ export default function ChatPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          className="flex flex-col w-full fixed inset-0 overflow-hidden items-center justify-center"
+          style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
+        >
+          <div className="text-center space-y-2 text-sm opacity-60">
+            <p>Loading chat…</p>
+          </div>
+        </div>
+      }
+    >
+      <ChatPageInner />
+    </Suspense>
   )
 }

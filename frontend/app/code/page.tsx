@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import AnsiToHtml from 'ansi-to-html'
 import { api } from '../../lib/api'
@@ -205,7 +205,7 @@ function sourceLabel(source: string | null) {
   return source
 }
 
-export default function CodePage() {
+function CodePageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const executionId = searchParams.get('id')
@@ -596,5 +596,24 @@ export default function CodePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function CodePage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
+        >
+          <div className="text-center space-y-3 text-sm opacity-60">
+            Loading execution…
+          </div>
+        </div>
+      }
+    >
+      <CodePageInner />
+    </Suspense>
   )
 }

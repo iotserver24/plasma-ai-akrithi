@@ -43,8 +43,8 @@ export default function LoginPage() {
   }, [terminalLines])
 
   useEffect(() => {
-    const matrixCanvas = matrixCanvasRef.current
-    const networkCanvas = networkCanvasRef.current
+    const matrixCanvas: HTMLCanvasElement = matrixCanvasRef.current!
+    const networkCanvas: HTMLCanvasElement = networkCanvasRef.current!
     if (!matrixCanvas || !networkCanvas) return
 
     const matrixCtx = matrixCanvas.getContext('2d')
@@ -63,13 +63,13 @@ export default function LoginPage() {
       matrixCanvas.height = Math.floor(h * dpr)
       matrixCanvas.style.width = `${w}px`
       matrixCanvas.style.height = `${h}px`
-      matrixCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      matrixCtx!.setTransform(dpr, 0, 0, dpr, 0, 0)
 
       networkCanvas.width = Math.floor(w * dpr)
       networkCanvas.height = Math.floor(h * dpr)
       networkCanvas.style.width = `${w}px`
       networkCanvas.style.height = `${h}px`
-      networkCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      networkCtx!.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
     resize()
@@ -82,6 +82,7 @@ export default function LoginPage() {
     let drops = Array.from({ length: columns() }, () => Math.random() * -100)
 
     function drawMatrix() {
+      if (!matrixCtx) return
       // trail
       matrixCtx.fillStyle = 'rgba(11, 15, 20, 0.10)'
       matrixCtx.fillRect(0, 0, window.innerWidth, window.innerHeight)
@@ -120,6 +121,7 @@ export default function LoginPage() {
     )
 
     function animateNetwork() {
+      if (!networkCtx) return
       networkCtx.clearRect(0, 0, window.innerWidth, window.innerHeight)
 
       for (let i = 0; i < particles.length; i++) {
