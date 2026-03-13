@@ -88,16 +88,12 @@ export async function runAgentInSandbox({ repo, owner, prompt, githubToken, onLo
       throw new Error(`Clone failed: ${cloneResult.stdout}`)
     }
 
-    onLog('Setting up git identity...')
     await sandbox.commands.run(
       `cd ${workdir} && ` +
       `git config user.email "ai@plasma.dev" && ` +
       `git config user.name "Plasma AI"`
     )
 
-    onLog(
-      `Sandbox config → template=${templateId}, provider=anthropic, baseUrl=${anthropicBase || 'unset'}, model=${anthropicModel || 'unset'}, apiKey=${redactedApiKey}`
-    )
     const versionResult = await sandbox.commands.run('xibecode --version', { timeoutMs: 15_000 })
     onLog(`Sandbox xibecode version: ${(versionResult.stdout || versionResult.stderr || 'unknown').trim()}`)
 

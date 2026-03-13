@@ -6,6 +6,21 @@ import { ExecutionLog } from '../db/executionLog.model.js'
 
 const router = Router()
 
+// List executions for the current user (all chats they own)
+router.get('/list', auth, async (req, res) => {
+  try {
+    const chats = await Chat.find({ userId: req.user.userId }).select('_id').lean()
+    const chatIds = chats.map((c) => c._id)
+    const executions = await Execution.find({ chatId: { $in: chatIds } })
+      .sort({ startedAt: -1 })
+      .limit(50)
+      .lean()
+    res.json({ executions })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 router.get('/:id', auth, async (req, res) => {
   try {
     const execution = await Execution.findById(req.params.id).lean()
