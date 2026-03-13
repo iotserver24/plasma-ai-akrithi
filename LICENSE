@@ -1,0 +1,47 @@
+PERSONAL USE LICENSE
+
+Copyright (c) 2026 Plasma AI — Aakrithi contributors.
+
+Effective date: 13 March 2026
+
+1. GRANT OF RIGHTS
+
+   You are granted a non-exclusive, non-transferable, revocable license to use,
+   copy, and modify this software and its source code solely for your personal,
+   non-commercial use.
+
+2. RESTRICTIONS
+
+   You may NOT, without prior written permission from the copyright holders:
+
+   a) Use this software or any derivative work for any commercial purpose,
+      including but not limited to: selling, licensing, or offering services
+      that incorporate this software for a fee;
+
+   b) Sublicense, distribute, or make this software available to third parties
+      for commercial use;
+
+   c) Use this software in a product or service that is sold or monetized.
+
+3. PERMISSION FOR COMMERCIAL USE
+
+   For commercial use, distribution, or incorporation into a commercial product
+   or service, you must obtain explicit written permission from the copyright
+   holders. Contact the repository maintainers via the project's GitHub
+   repository: https://github.com/iotserver24/plasma-ai-akrithi
+
+4. ATTRIBUTION
+
+   When using this software, you must retain all copyright notices, this
+   license, and give appropriate credit to the project and to any third-party
+   components and open source projects acknowledged in the README (including
+   XibeCode, E2B, and others).
+
+5. NO WARRANTY
+
+   This software is provided "as is", without warranty of any kind. In no
+   event shall the copyright holders be liable for any claim or damages.
+
+6. TERMINATION
+
+   This license terminates automatically if you breach any of its terms.
