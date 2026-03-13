@@ -354,23 +354,6 @@ export default function RepositoryExplorerPage() {
             >
               {selectedRepo ? 'Use this repository' : 'Select a repository first'}
             </button>
-
-            <div className="bg-fixai-cyan/5 border border-fixai-cyan/20 p-4 rounded-lg">
-              <h4 className="text-xs font-semibold text-fixai-cyan mb-2">AI Insights</h4>
-              <p className="text-[11px] text-gray-400 leading-relaxed">
-                Your most active repo{' '}
-                <span className="text-white">
-                  {selectedRepo ? selectedRepo.name : '—'}
-                </span>{' '}
-                has 4 critical performance bottlenecks detected in the last commit.
-              </p>
-              <button
-                className="mt-3 text-[11px] font-bold text-fixai-cyan hover:underline uppercase tracking-tighter"
-                type="button"
-              >
-                View Report
-              </button>
-            </div>
           </div>
         </aside>
       </div>

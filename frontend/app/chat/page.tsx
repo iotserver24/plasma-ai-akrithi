@@ -3,11 +3,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { getToken } from '../../lib/api'
 
 interface Message {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'research'
   content: string
+  filesRead?: string[]
+  researching?: boolean
 }
 
 interface StoredRepo {
@@ -44,6 +47,69 @@ function parsePlanTags(text: string): { message: string; plan: string } {
   return { message, plan }
 }
 
+function MermaidBlock({ chart }: { chart: string }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !ref.current || !chart.trim()) return
+
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const mermaidModule = await import('mermaid')
+        const mermaid: any = (mermaidModule as any).default ?? mermaidModule
+
+        mermaid.initialize?.({ startOnLoad: false, theme: 'dark' })
+
+        const id = `mermaid-${Math.random().toString(36).slice(2)}`
+        const result = await mermaid.render?.(id, chart)
+        const svgCode: string | undefined =
+          typeof result === 'string' ? result : result?.svg
+
+        if (!cancelled && ref.current && svgCode) {
+          ref.current.innerHTML = svgCode
+        }
+      } catch {
+        // fail silently; show raw text if needed
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [chart])
+
+  return <div ref={ref} className="mermaid" />
+}
+
+const markdownComponents = {
+  code({
+    inline,
+    className,
+    children,
+    ...props
+  }: {
+    inline?: boolean
+    className?: string
+    children?: React.ReactNode
+  }) {
+    const match = /language-(\w+)/.exec(className || '')
+    const lang = match?.[1]
+
+    if (!inline && lang === 'mermaid') {
+      const chart = String(children ?? '').trim()
+      return <MermaidBlock chart={chart} />
+    }
+
+    return (
+      <code className={className} {...props}>
+        {children}
+      </code>
+    )
+  },
+}
+
 export default function ChatPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -63,6 +129,8 @@ export default function ChatPage() {
   const [owner, setOwner] = useState('')
   const [defaultBranch, setDefaultBranch] = useState('main')
   const [currentChatId, setCurrentChatId] = useState<string | null>(initialChatId.current)
+  const [researchStatus, setResearchStatus] = useState<string | null>(null)
+  const [filesRead, setFilesRead] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Load repo from localStorage
@@ -114,11 +182,16 @@ export default function ChatPage() {
     setError('')
     setInput('')
     setIsLoading(true)
+    setFilesRead([])
+    setResearchStatus(null)
 
-    // Add user message immediately
-    setMessages((prev) => [...prev, { role: 'user', content: text }])
-    // Reserve an assistant slot for streaming
-    setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+    // Add user message, then a research bubble, then the assistant slot
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: text },
+      { role: 'research', content: '', filesRead: [], researching: true },
+      { role: 'assistant', content: '' },
+    ])
 
     const token = getToken()
 
@@ -130,9 +203,10 @@ export default function ChatPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          prompt: text,
+          prompt: `${text}\n\nPlease respond in Markdown format, and when describing architectures, flows, or relationships, include Mermaid diagrams in fenced \`\`\`mermaid code blocks where helpful.`,
           repo,
           owner,
+          defaultBranch,
           ...(currentChatId ? { chatId: currentChatId } : {}),
         }),
       })
@@ -171,29 +245,62 @@ export default function ChatPage() {
               }
             }
 
+            if (payload.type === 'reading_file') {
+              const p = payload.data.path as string
+              setResearchStatus(`Reading ${p}`)
+              setFilesRead((prev) => {
+                const next = [...prev, p]
+                // Keep the research bubble up-to-date
+                setMessages((msgs) => {
+                  const idx = msgs.findIndex((m) => m.role === 'research')
+                  if (idx === -1) return msgs
+                  const updated = [...msgs]
+                  updated[idx] = { ...updated[idx], filesRead: next, researching: true }
+                  return updated
+                })
+                return next
+              })
+            }
+
             if (payload.type === 'chunk') {
               accumulated += payload.data.content as string
               const { message, plan: planChunk } = parsePlanTags(accumulated)
-              // Update streaming assistant message
-              setMessages((prev) => [
-                ...prev.slice(0, -1),
-                { role: 'assistant', content: message },
-              ])
+              // Update only the last assistant slot, preserve research bubble
+              setMessages((prev) => {
+                const lastIdx = prev.length - 1
+                if (prev[lastIdx]?.role !== 'assistant') return prev
+                const updated = [...prev]
+                updated[lastIdx] = { role: 'assistant', content: message }
+                return updated
+              })
               if (planChunk) setPlan(planChunk)
             }
 
             if (payload.type === 'done') {
               const { message, plan: finalPlan } = parsePlanTags(accumulated)
-              setMessages((prev) => [
-                ...prev.slice(0, -1),
-                { role: 'assistant', content: message || '✓ Plan generated.' },
-              ])
+              setMessages((prev) => {
+                // Mark research bubble as done, update assistant message
+                return prev.map((m, i) => {
+                  if (m.role === 'research') return { ...m, researching: false }
+                  if (i === prev.length - 1 && m.role === 'assistant')
+                    return { ...m, content: message || '✓ Plan generated.' }
+                  return m
+                })
+              })
               if (finalPlan) setPlan(finalPlan)
+              setResearchStatus(null)
             }
 
             if (payload.type === 'error') {
               setError((payload.data.message as string) || 'Error generating plan.')
-              setMessages((prev) => prev.slice(0, -1)) // remove empty assistant slot
+              setMessages((prev) => {
+                // Mark research done, remove empty assistant slot
+                const withoutAssistant = prev.filter((_, i) => !(i === prev.length - 1 && prev[i].role === 'assistant'))
+                return withoutAssistant.map((m) =>
+                  m.role === 'research' ? { ...m, researching: false } : m,
+                )
+              })
+              setResearchStatus(null)
             }
           } catch {
             // ignore parse errors for individual SSE lines
@@ -203,14 +310,15 @@ export default function ChatPage() {
     } catch (err: unknown) {
       setError((err as Error)?.message || 'Failed to generate plan.')
       setMessages((prev) => {
-        // remove empty assistant slot and optimistic user message
-        const withoutAssistant = prev.slice(0, -1)
-        return withoutAssistant[withoutAssistant.length - 1]?.content === text
-          ? withoutAssistant.slice(0, -1)
-          : withoutAssistant
+        // Remove trailing empty assistant slot; mark research done
+        const cleaned = prev
+          .filter((m, i) => !(i === prev.length - 1 && m.role === 'assistant' && !m.content))
+          .map((m) => m.role === 'research' ? { ...m, researching: false } : m)
+        return cleaned
       })
     } finally {
       setIsLoading(false)
+      setResearchStatus(null)
     }
   }
 
@@ -289,12 +397,12 @@ export default function ChatPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="flex flex-col w-full fixed inset-0 overflow-hidden"
       style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
     >
-      {/* Header */}
+      {/* Header — fixed at top */}
       <header
-        className="h-14 flex items-center px-6 justify-between sticky top-0 z-50 shrink-0"
+        className="h-14 flex items-center px-6 justify-between shrink-0 z-50"
         style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
       >
         <div className="flex items-center gap-3">
@@ -335,19 +443,21 @@ export default function ChatPage() {
         )}
       </header>
 
-      {/* Body: two-column */}
-      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 3.5rem)' }}>
+      {/* Body: two-column, full width left-to-right; only chat and plan panels scroll */}
+      <div className="flex flex-1 min-h-0 w-full">
         {/* ─── Left: chat thread ─── */}
         <div
-          className="flex flex-col"
+          className="flex flex-col min-h-0 shrink-0"
           style={{
             width: hasPlan ? '42%' : '100%',
+            minWidth: hasPlan ? '320px' : undefined,
             borderRight: hasPlan ? '1px solid var(--color-border)' : 'none',
             transition: 'width 0.3s ease',
           }}
         >
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Messages — only this area scrolls (vertical) */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
             {messages.length === 0 && !isLoading && (
               <div className="flex flex-col items-center justify-center h-full gap-3 opacity-40 text-sm select-none">
                 <svg
@@ -382,6 +492,59 @@ export default function ChatPage() {
             {messages.map((msg, i) => {
               const isLast = i === messages.length - 1
               const streaming = isLoading && isLast && msg.role === 'assistant'
+
+              // ── Research bubble ──
+              if (msg.role === 'research') {
+                const files = msg.filesRead ?? []
+                if (files.length === 0 && !msg.researching) return null
+                return (
+                  <div key={i} className="flex justify-start">
+                    <div
+                      className="max-w-[92%] rounded-2xl px-4 py-3 text-xs"
+                      style={{
+                        background: 'rgba(99,102,241,0.07)',
+                        border: '1px solid rgba(99,102,241,0.22)',
+                        minWidth: '220px',
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-2" style={{ color: 'rgba(165,180,252,0.85)' }}>
+                        {msg.researching ? (
+                          <span
+                            className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full"
+                            style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
+                          />
+                        ) : (
+                          <span style={{ color: '#4ade80' }}>✓</span>
+                        )}
+                        <span className="font-semibold uppercase tracking-wide text-[10px]">
+                          {msg.researching ? 'Researching repo…' : `Read ${files.length} file${files.length !== 1 ? 's' : ''}`}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1" style={{ maxHeight: '160px', overflowY: 'auto' }}>
+                        {files.map((f, fi) => (
+                          <div key={fi} className="flex items-center gap-1.5" style={{ color: 'rgba(200,210,230,0.65)' }}>
+                            <span style={{ color: '#4ade80', flexShrink: 0, fontSize: '10px' }}>✓</span>
+                            <span className="font-mono truncate" style={{ fontSize: '11px' }}>{f}</span>
+                          </div>
+                        ))}
+                        {msg.researching && researchStatus && (
+                          <div className="flex items-center gap-1.5 mt-0.5" style={{ color: 'rgba(165,180,252,0.65)' }}>
+                            <span
+                              className="inline-block w-2 h-2 border border-current border-t-transparent rounded-full"
+                              style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}
+                            />
+                            <span className="font-mono truncate" style={{ fontSize: '11px' }}>
+                              {researchStatus.replace('Reading ', '')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              // ── Regular user / assistant bubbles ──
               return (
                 <div
                   key={i}
@@ -410,11 +573,34 @@ export default function ChatPage() {
                       ) : null
                     ) : msg.content ? (
                       (() => {
-                        const { message: chatPart } = parsePlanTags(msg.content)
-                        const toShow = chatPart.trim() || 'Plan generated. See execution plan on the right.'
+                        const { message: chatPart, plan: planPart } = parsePlanTags(msg.content)
+                        const hasPlanInMsg = planPart.trim().length > 0
+                        if (hasPlanInMsg) {
+                          // Plan is on the right — show only the brief intro sentence(s) here
+                          const intro = chatPart.trim()
+                            ? chatPart.trim().split('\n').slice(0, 2).join('\n').trim()
+                            : ''
+                          return (
+                            <div className="text-sm leading-6 opacity-80">
+                              {intro ? (
+                                <p className="whitespace-pre-wrap">{intro}</p>
+                              ) : null}
+                              <p className="mt-1 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-accent)', opacity: 0.7 }}>
+                                <span>→</span>
+                                <span>Execution plan ready on the right</span>
+                              </p>
+                            </div>
+                          )
+                        }
+                        // No plan yet (still streaming or plain response)
                         return (
-                          <div className="prose prose-invert prose-sm max-w-none text-sm leading-6 opacity-90">
-                            <ReactMarkdown>{toShow}</ReactMarkdown>
+                          <div className="prose prose-invert prose-sm max-w-none text-sm leading-6 opacity-90 prose-pre:whitespace-pre-wrap prose-pre:break-words">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={markdownComponents}
+                            >
+                              {chatPart.trim() || msg.content}
+                            </ReactMarkdown>
                           </div>
                         )
                       })()
@@ -434,61 +620,67 @@ export default function ChatPage() {
 
             <div ref={messagesEndRef} />
           </div>
+          </div>
 
-          {/* Input */}
+          {/* Input — fixed at bottom of chat panel; stays visible when messages scroll */}
           <div
-            className="shrink-0 p-4"
+            className="shrink-0 py-3 px-4"
             style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
           >
-            {error && (
-              <p
-                className="mb-2 text-xs px-3 py-1.5 rounded"
-                style={{
-                  background: 'rgba(239,68,68,0.1)',
-                  border: '1px solid rgba(239,68,68,0.3)',
-                  color: '#f87171',
-                }}
+            <div className="max-w-2xl mx-auto">
+              {error && (
+                <p
+                  className="mb-2 text-xs px-3 py-1.5 rounded"
+                  style={{
+                    background: 'rgba(239,68,68,0.1)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    color: '#f87171',
+                  }}
+                >
+                  {error}
+                </p>
+              )}
+              <div
+                className="flex gap-2 items-end rounded-2xl px-3 py-2"
+                style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
               >
-                {error}
-              </p>
-            )}
-            <div className="flex gap-2 items-end">
-              <textarea
-                className="input-field resize-none text-sm"
-                style={{ height: '72px' }}
-                placeholder={
-                  hasPlan
-                    ? 'Refine the plan or ask for changes…'
-                    : 'Describe a change to make to this repo…'
-                }
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isLoading || isExecuting}
-              />
-              <button
-                onClick={handleSend}
-                disabled={isLoading || isExecuting || !input.trim()}
-                className="btn-primary text-sm shrink-0"
-                style={{ height: '72px', padding: '0 1.2rem' }}
-              >
-                {isLoading ? (
-                  <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
-                ) : hasPlan ? (
-                  'Refine'
-                ) : (
-                  'Plan'
-                )}
-              </button>
+                <textarea
+                  className="flex-1 bg-transparent resize-none text-sm outline-none"
+                  style={{ height: '56px', lineHeight: '1.5', paddingTop: '6px', color: 'inherit' }}
+                  placeholder={
+                    hasPlan
+                      ? 'Refine the plan or ask for changes…'
+                      : 'Describe a change to make to this repo…'
+                  }
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading || isExecuting}
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={isLoading || isExecuting || !input.trim()}
+                  className="btn-primary text-sm shrink-0 self-end"
+                  style={{ padding: '0.4rem 1rem', marginBottom: '2px' }}
+                >
+                  {isLoading ? (
+                    <span className="animate-spin inline-block w-3 h-3 border border-current border-t-transparent rounded-full" />
+                  ) : hasPlan ? (
+                    'Refine'
+                  ) : (
+                    'Plan'
+                  )}
+                </button>
+              </div>
+              <p className="text-[10px] opacity-20 mt-1 text-center">Enter to send · Shift+Enter for newline</p>
             </div>
-            <p className="text-[10px] opacity-25 mt-1">Enter to send · Shift+Enter for newline</p>
           </div>
         </div>
 
-        {/* ─── Right: plan panel (only when plan exists) ─── */}
+        {/* ─── Right: plan panel (only when plan exists); only this area scrolls (vertical + horizontal) ─── */}
         {hasPlan && (
-          <div className="flex flex-col overflow-hidden" style={{ flex: 1 }}>
-            {/* Panel header — NO execute button here */}
+          <div className="flex flex-col min-h-0 min-w-0 flex-1">
+            {/* Panel header — fixed, no scroll */}
             <div
               className="flex items-center gap-2 px-5 py-3 shrink-0"
               style={{
@@ -519,13 +711,18 @@ export default function ChatPage() {
               )}
             </div>
 
-            {/* Plan content */}
+            {/* Plan content — scrolls vertically only */}
             <div
-              className="flex-1 overflow-y-auto p-6"
+              className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6"
               style={{ background: 'var(--color-bg)' }}
             >
-              <div className="prose prose-invert prose-sm max-w-none">
-                <ReactMarkdown>{plan}</ReactMarkdown>
+              <div className="prose prose-invert prose-sm max-w-none min-w-0 prose-pre:whitespace-pre-wrap prose-pre:break-words">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={markdownComponents}
+                >
+                  {plan}
+                </ReactMarkdown>
               </div>
             </div>
           </div>
